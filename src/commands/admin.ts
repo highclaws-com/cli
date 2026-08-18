@@ -4,6 +4,7 @@ import { registerDashboard } from "./admin/dashboard"
 import { registerDb } from "./admin/db"
 import { registerDeploy } from "./admin/deploy"
 import { registerModels } from "./admin/models"
+import { registerPve } from "./admin/pve"
 
 export function registerAdmin(program: Command): void {
   const admin = program.command("admin").description("admin operations")
@@ -26,4 +27,5 @@ export function registerAdmin(program: Command): void {
   registerDb(admin, getCtx)
   registerDeploy(admin, getCtx)
   registerModels(admin, getCtx)
+  registerPve(admin, getCtx)
 }
