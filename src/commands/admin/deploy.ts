@@ -1,19 +1,11 @@
-import { spawn } from "node:child_process"
 import path from "node:path"
 import { Command } from "commander"
 import { LoadedConfig } from "../../config"
+import { run } from "../../exec"
 
 interface DeployOptions {
   portainer?: boolean
   stack?: boolean
-}
-
-function run(cmd: string, args: string[]): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: "inherit" })
-    child.on("error", reject)
-    child.on("close", (code) => resolve(code ?? 1))
-  })
 }
 
 export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void {
