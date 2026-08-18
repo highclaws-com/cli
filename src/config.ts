@@ -14,6 +14,7 @@ export interface SshTarget {
 }
 
 export interface CliConfig {
+  domain?: string
   swarm?: SshTarget[]
   pve?: SshTarget[]
   db?: SshTarget

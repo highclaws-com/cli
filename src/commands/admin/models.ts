@@ -1,14 +1,16 @@
 import { Command } from "commander"
-import { LoadedConfig, extractEnv } from "../../config"
+import { LoadedConfig } from "../../config"
 
 export function registerModels(admin: Command, getCtx: () => LoadedConfig): void {
   const models = admin
     .command("models")
     .description("fetch and display the public model context")
     .action(async () => {
-      const { env } = getCtx()
-      const [domain] = extractEnv(env, ["GATEWAY_DOMAIN"])
-      const url = `https://${domain}/connectors/public/model-context`
+      const { config } = getCtx()
+      if (!config.domain) {
+        throw new Error("no 'domain' key in secrets/cli.json")
+      }
+      const url = `https://${config.domain}/connectors/public/model-context`
       const res = await fetch(url)
       if (!res.ok) {
         throw new Error(`request failed: HTTP ${res.status} ${res.statusText}`)

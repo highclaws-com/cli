@@ -1,15 +1,17 @@
 import { spawn } from "node:child_process"
 import { Command } from "commander"
-import { LoadedConfig, extractEnv } from "../../config"
+import { LoadedConfig } from "../../config"
 
 export function registerDashboard(admin: Command, getCtx: () => LoadedConfig): void {
   const dashboard = admin
     .command("dashboard")
     .description("open the dashboards in the browser")
     .action(() => {
-      const { env } = getCtx()
-      const [domain] = extractEnv(env, ["GATEWAY_DOMAIN"])
-      const url = `https://${domain}/grafana/dashboards`
+      const { config } = getCtx()
+      if (!config.domain) {
+        throw new Error("no 'domain' key in secrets/cli.json")
+      }
+      const url = `https://${config.domain}/grafana/dashboards`
       console.log(url)
       const [openerCmd, openerArgs] =
         process.platform === "darwin"
