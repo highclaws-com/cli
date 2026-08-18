@@ -1,11 +1,7 @@
 import path from "node:path"
 import { Command } from "commander"
 import { LoadedConfig, extractEnv } from "../../config"
-import { run } from "../../exec"
-
-function q(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`
-}
+import { escapeShell, run } from "../../exec"
 
 export function registerModels(admin: Command, getCtx: () => LoadedConfig): void {
   const models = admin
@@ -48,7 +44,7 @@ export function registerModels(admin: Command, getCtx: () => LoadedConfig): void
       const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db`
       const key = path.join(root, target.ssh_key)
       const at = `${target.ssh_usr}@${target.ip}`
-      const extras = extra.map(q).join(" ")
+      const extras = extra.map(escapeShell).join(" ")
       const remote = [
         `cd ${opts.remoteRoot}`,
         `export PATH="$HOME/.local/bin:$PATH"`,
@@ -56,10 +52,10 @@ export function registerModels(admin: Command, getCtx: () => LoadedConfig): void
         "git fetch --depth=1 origin deploy",
         "git checkout deploy",
         "git submodule update --init --recursive --recommend-shallow",
-        `uv run scripts/db_scan_models.py ${q(sqlLink)}${extras ? " " + extras : ""}`
+        `uv run scripts/db_scan_models.py ${escapeShell(sqlLink)}${extras ? " " + extras : ""}`
       ].join(" && ")
       console.log(`[models scan] db node ${target.ip}, remote root ${opts.remoteRoot}`)
-      console.log(`$ ssh -i ${key} ${at} ${q(remote)}`)
+      console.log(`$ ssh -i ${key} ${at} ${escapeShell(remote)}`)
       const rc = await run("ssh", ["-i", key, at, remote])
       if (rc !== 0) {
         throw new Error(`models scan failed (exit ${rc})`)
