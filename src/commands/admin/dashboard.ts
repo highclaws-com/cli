@@ -1,28 +1,20 @@
-import { spawn } from "node:child_process"
 import { Command } from "commander"
 import { LoadedConfig } from "../../config"
 
 export function registerDashboard(admin: Command, getCtx: () => LoadedConfig): void {
   const dashboard = admin
     .command("dashboard")
-    .description("open the dashboards in the browser")
+    .description("print the dashboard URLs")
     .action(() => {
       const { config } = getCtx()
-      if (!config.domain) {
-        throw new Error("no 'domain' key in secrets/cli.json")
+      const boards = config.dashboards
+      if (!boards || Object.keys(boards).length === 0) {
+        throw new Error("no 'dashboards' entries in secrets/cli.json")
       }
-      const url = `https://${config.domain}/grafana/dashboards`
-      console.log(url)
-      const [openerCmd, openerArgs] =
-        process.platform === "darwin"
-          ? ["open", [url]]
-          : process.platform === "win32"
-            ? ["cmd", ["/c", "start", "", url]]
-            : ["xdg-open", [url]]
-      const child = spawn(openerCmd, openerArgs, { detached: true, stdio: "ignore" })
-      child.on("error", () => {
-        console.log(`note: could not launch a browser; visit ${url} manually`)
-      })
-      child.unref()
+      const width = Math.max(...Object.keys(boards).map((k) => k.length))
+      for (const [name, d] of Object.entries(boards)) {
+        const memo = d.memo ? `  (memo: ${d.memo})` : ""
+        console.log(`${name.padEnd(width)} : ${d.url}${memo}`)
+      }
     })
 }

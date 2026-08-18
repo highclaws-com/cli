@@ -13,8 +13,14 @@ export interface SshTarget {
   web_pass?: string
 }
 
+export interface DashboardEntry {
+  url: string
+  memo?: string
+}
+
 export interface CliConfig {
   domain?: string
+  dashboards?: Record<string, DashboardEntry>
   swarm?: SshTarget[]
   pve?: SshTarget[]
   db?: SshTarget
