@@ -5,7 +5,7 @@ import { escapeShell, runCapture } from "../../exec"
 
 interface DbOptions {
   entrypoint?: boolean
-  lookup?: string
+  lookupNode?: string
 }
 
 export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
@@ -13,9 +13,9 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
     .command("db")
     .description("database access entrypoints")
     .option("--entrypoint", "print web and ssh entrypoints for the db")
-    .option("--lookup <node_id>", "print the ProvisionVPS result for a sandbox node_id")
+    .option("--lookup-node <node_id>", "fuzzy (substring) search a sandbox node_id and print its ProvisionVPS result")
     .action(async (opts: DbOptions) => {
-      if (!opts.entrypoint && !opts.lookup) {
+      if (!opts.entrypoint && !opts.lookupNode) {
         db.outputHelp()
         return
       }
@@ -41,29 +41,29 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
         console.log(lines.join("\n"))
       }
 
-      if (opts.lookup) {
-        const nodeId = String(opts.lookup).replace(/'/g, "''")
-        const sql = `SELECT vps.result FROM "Sandbox" sd JOIN "ProvisionVPS" vps ON sd.provision_id = vps.provision_id WHERE sd.node_id = '${nodeId}';`
+      if (opts.lookupNode) {
+        const sql = `SELECT vps.result FROM "Sandbox" sd JOIN "ProvisionVPS" vps ON sd.provision_id = vps.provision_id WHERE sd.node_id LIKE '%${opts.lookupNode}%';`
         const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
         const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
-        console.error(`[lookup] node_id=${opts.lookup} on db ${target.ip}`)
+        console.error(`[lookup-node] node_id=${opts.lookupNode} on db ${target.ip}`)
         console.error(`$ ssh -i ${sshKey} ${target.ssh_usr}@${target.ip} ${escapeShell(remote)}`)
         const { code, stdout } = await runCapture("ssh", ["-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote])
         if (code !== 0) {
-          throw new Error(`lookup failed (exit ${code})`)
+          throw new Error(`lookup-node failed (exit ${code})`)
         }
         const rows = stdout.split("\n").map((l) => l.trimEnd()).filter((l) => l.length > 0)
         if (rows.length === 0) {
-          console.error(`no row found for node_id ${opts.lookup}`)
+          console.error(`no row found for node_id ${opts.lookupNode}`)
           return
         }
-        for (const row of rows) {
+        const values = rows.map((row) => {
           try {
-            console.log(JSON.stringify(JSON.parse(row), null, 2))
+            return JSON.parse(row)
           } catch {
-            console.log(row)
+            return row
           }
-        }
+        })
+        console.log(JSON.stringify(values, null, 2))
       }
     })
 }
