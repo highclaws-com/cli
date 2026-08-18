@@ -1,5 +1,6 @@
 import { Command } from "commander"
 import { loadConfig, LoadedConfig } from "../config"
+import { registerBackup } from "./admin/backup"
 import { registerDashboard } from "./admin/dashboard"
 import { registerDb } from "./admin/db"
 import { registerDeploy } from "./admin/deploy"
@@ -23,6 +24,7 @@ export function registerAdmin(program: Command): void {
     if (!loaded) throw new Error("admin context not initialized")
     return loaded
   }
+  registerBackup(admin, getCtx)
   registerDashboard(admin, getCtx)
   registerDb(admin, getCtx)
   registerDeploy(admin, getCtx)
