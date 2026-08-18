@@ -16,7 +16,7 @@ npm run bin:linux       # standalone binaries -> bin/ (linux, mac, win, or all)
 npm run bin:mac
 npm run bin:win
 npm run bin:all
-npm link                # expose `cli` as a global command for local use
+npm link                # expose `hc` as a global command for local use
 ```
 
 ## Administration
