@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import readline from "node:readline/promises"
 import { Command } from "commander"
 import { LoadedConfig } from "../../config"
 import { run } from "../../exec"
@@ -10,6 +11,7 @@ interface DeployOptions {
   secrets?: boolean
   ssh?: boolean
   updateFirewall?: boolean
+  pveImage?: boolean
 }
 
 export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void {
@@ -21,8 +23,9 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
     .option("--ssh", "print ssh commands to log into each manager node")
     .option("--update-firewall", "apply the firewall to all swarm nodes")
+    .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
     .action(async (opts: DeployOptions) => {
-      if (!opts.portainer && !opts.stack && !opts.secrets && !opts.ssh && !opts.updateFirewall) {
+      if (!opts.portainer && !opts.stack && !opts.secrets && !opts.ssh && !opts.updateFirewall && !opts.pveImage) {
         deploy.outputHelp()
         return
       }
@@ -118,6 +121,46 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
         managers.forEach((n, i) => {
           console.log(`\x1b[1;32m [${i + 1}] ssh -i ${n.ssh_key} ${n.ssh_usr}@${n.ip} \x1b[0m`)
         })
+      }
+
+      if (opts.pveImage) {
+        const img = config.pve_base_image
+        const targets = config.pve ?? []
+        if (targets.length === 0) {
+          throw new Error("no 'pve' entries in secrets/cli.json")
+        }
+        if (!img?.url_prefix || !img.url_path || !img.url_img) {
+          throw new Error("no pve_base_image saved")
+        }
+        const url = `${img.url_prefix}/${img.url_path}/${img.url_img}`
+        targets.forEach((n, i) => {
+          console.log(`\x1b[1;32m [${i + 1}] ./scripts/pve_template_roll.sh ${n.ip} ${url} \x1b[0m`)
+        })
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+        let answer
+        try {
+          const plural = targets.length > 1 ? "s" : ""
+          answer = (await rl.question(`run ${targets.length} command${plural}? (y/N) `)).trim().toLowerCase()
+        } catch {
+          throw new Error("input closed, nothing ran")
+        } finally {
+          rl.close()
+        }
+        if (answer !== "y" && answer !== "yes") {
+          console.log("skipped, nothing ran")
+          return
+        }
+        for (const [i, n] of targets.entries()) {
+          console.log(`[pve-image ${i + 1}] rolling template on ${n.ip}`)
+          const rc = await run(
+            "./scripts/pve_template_roll.sh",
+            [n.ip, url],
+            { cwd: root, env: { PVE_KEY: path.join(root, n.ssh_key) } }
+          )
+          if (rc !== 0) {
+            throw new Error(`pve template roll failed for ${n.ip} (exit ${rc})`)
+          }
+        }
       }
 
       if (opts.updateFirewall) {
