@@ -1,0 +1,36 @@
+{
+  "name": "cli",
+  "version": "0.1.0",
+  "description": "",
+  "license": "UNLICENSED",
+  "private": true,
+  "bin": {
+    "cli": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/cli.js",
+    "dev": "npm run build --silent && node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "bin:linux": "pkg dist/cli.js --targets node22-linux-x64,node22-linux-arm64 --fallback-to-source --output bin/cli-linux",
+    "bin:mac": "pkg dist/cli.js --targets node22-macos-x64,node22-macos-arm64 --fallback-to-source --output bin/cli-mac",
+    "bin:win": "pkg dist/cli.js --targets node22-win-x64 --fallback-to-source --output bin/cli-win",
+    "bin:all": "npm run bin:linux && npm run bin:mac && npm run bin:win"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@yao-pkg/pkg": "^6.22.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}
