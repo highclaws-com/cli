@@ -8,6 +8,8 @@ interface DeployOptions {
   portainer?: boolean
   stack?: boolean
   secrets?: boolean
+  ssh?: boolean
+  updateFirewall?: boolean
 }
 
 export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void {
@@ -17,8 +19,10 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
     .option("--secrets", "upload local secrets to the manager swarm node and the db node")
     .option("--stack", "update and deploy the swarm-1 stack on the manager swarm node")
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
+    .option("--ssh", "print ssh commands to log into each manager node")
+    .option("--update-firewall", "apply the firewall to all swarm nodes")
     .action(async (opts: DeployOptions) => {
-      if (!opts.portainer && !opts.stack && !opts.secrets) {
+      if (!opts.portainer && !opts.stack && !opts.secrets && !opts.ssh && !opts.updateFirewall) {
         deploy.outputHelp()
         return
       }
@@ -106,6 +110,31 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
         const tc = await run("ssh", tunnelArgs)
         if (tc !== 0) {
           throw new Error(`tunnel ended (exit ${tc})`)
+        }
+      }
+
+      if (opts.ssh) {
+        const managers = (config.swarm ?? []).filter((n) => n.manager)
+        managers.forEach((n, i) => {
+          console.log(`\x1b[1;32m [${i + 1}] ssh -i ${n.ssh_key} ${n.ssh_usr}@${n.ip} \x1b[0m`)
+        })
+      }
+
+      if (opts.updateFirewall) {
+        const swarm = config.swarm ?? []
+        if (swarm.length === 0) {
+          throw new Error("no 'swarm' entries in secrets/cli.json")
+        }
+        for (const n of swarm) {
+          console.log(`[firewall] applying on ${n.ip} as ${n.ssh_usr}`)
+          const rc = await run(
+            "./scripts/pve_firewall.sh",
+            [n.ssh_usr, n.ip],
+            { cwd: root, env: { PVE_KEY: path.join(root, n.ssh_key) } }
+          )
+          if (rc !== 0) {
+            throw new Error(`firewall failed for ${n.ip} (exit ${rc})`)
+          }
         }
       }
     })
