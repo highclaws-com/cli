@@ -3,6 +3,7 @@ import { loadConfig, LoadedConfig } from "../config"
 import { registerDashboard } from "./admin/dashboard"
 import { registerDb } from "./admin/db"
 import { registerDeploy } from "./admin/deploy"
+import { registerModels } from "./admin/models"
 
 export function registerAdmin(program: Command): void {
   const admin = program.command("admin").description("admin operations")
@@ -24,4 +25,5 @@ export function registerAdmin(program: Command): void {
   registerDashboard(admin, getCtx)
   registerDb(admin, getCtx)
   registerDeploy(admin, getCtx)
+  registerModels(admin, getCtx)
 }
