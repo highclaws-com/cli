@@ -6,6 +6,9 @@ export interface SshTarget {
   ip: string
   ssh_key: string
   ssh_usr: string
+  container?: string
+  src_path?: string
+  manager?: boolean
   web_port?: number
   web_pass?: string
 }
