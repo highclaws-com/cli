@@ -76,7 +76,7 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
         }
         const stackCmd = [
           "git fetch --depth=1 origin deploy",
-          "git checkout deploy",
+          "git checkout -B deploy origin/deploy",
           "git submodule update --init --recursive --recommend-shallow",
           "source config.env",
           "docker stack deploy --prune --compose-file swarm_service.yml swarm-1 --detach=false --with-registry-auth"
