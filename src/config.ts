@@ -18,13 +18,24 @@ export interface DashboardEntry {
   memo?: string
 }
 
+export interface PveBaseImage {
+  url_prefix?: string
+  url_path?: string
+  url_img?: string
+}
+
 export interface CliConfig {
   domain?: string
   dashboards?: Record<string, DashboardEntry>
   swarm?: SshTarget[]
   pve?: SshTarget[]
   db?: SshTarget
+  pve_base_image?: PveBaseImage
   [key: string]: unknown
+}
+
+export function saveConfig(root: string, config: CliConfig): void {
+  fs.writeFileSync(path.join(root, CONFIG_REL), JSON.stringify(config, null, 2) + "\n")
 }
 
 export interface LoadedConfig {

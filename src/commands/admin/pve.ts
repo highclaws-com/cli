@@ -1,11 +1,89 @@
 import path from "node:path"
+import readline from "node:readline/promises"
 import { Command } from "commander"
-import { LoadedConfig } from "../../config"
+import { LoadedConfig, saveConfig } from "../../config"
 import { run } from "../../exec"
 
 interface PveOptions {
   proxmox?: boolean
   updateFirewall?: boolean
+  baseImages?: boolean
+}
+
+const DEFAULT_URL_PREFIX = "https://cloud.debian.org/images/cloud"
+
+const isLocal = (h: string): boolean => !h.startsWith("/") && !h.includes("//")
+
+function pickHrefs(html: string, ok: (h: string) => boolean): string[] {
+  return [...new Set([...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter(ok))].sort()
+}
+
+async function listNames(url: string, ok: (h: string) => boolean): Promise<string[]> {
+  const res = await fetch(url)
+  if (!res.ok) {
+    throw new Error(`listing ${url} failed (HTTP ${res.status})`)
+  }
+  return pickHrefs(await res.text(), (h) => isLocal(h) && ok(h))
+}
+
+async function select(
+  rl: readline.Interface,
+  step: number,
+  total: number,
+  label: string,
+  options: string[]
+): Promise<string> {
+  if (options.length === 0) {
+    throw new Error(`no options listed for ${label}`)
+  }
+  console.log(`\n[${step}/${total}] select ${label}:`)
+  options.forEach((o, i) => console.log(`  [${i + 1}] ${o}`))
+  for (;;) {
+    let answer
+    try {
+      answer = (await rl.question("> ")).trim()
+    } catch {
+      throw new Error("aborted, nothing saved")
+    }
+    if (answer === "") {
+      throw new Error("aborted, nothing saved")
+    }
+    const n = Number(answer)
+    if (Number.isInteger(n) && n >= 1 && n <= options.length) {
+      return options[n - 1]
+    }
+    console.log("invalid choice, try again")
+  }
+}
+
+async function baseImages(ctx: () => LoadedConfig): Promise<void> {
+  const { root, config } = ctx()
+  const prev = config.pve_base_image ?? {}
+  console.log("current values in secrets/cli.json:")
+  console.log(`  url_prefix : ${prev.url_prefix ?? "empty"}`)
+  console.log(`  url_path   : ${prev.url_path ?? "empty"}`)
+  console.log(`  url_img    : ${prev.url_img ?? "empty"}`)
+  const prefix = (prev.url_prefix ?? DEFAULT_URL_PREFIX).replace(/\/+$/, "")
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    const distro = await select(
+      rl, 1, 3, "distribution",
+      (await listNames(`${prefix}/`, (h) => h.endsWith("/"))).map((h) => h.slice(0, -1))
+    )
+    const build = await select(
+      rl, 2, 3, `build of ${distro}`,
+      (await listNames(`${prefix}/${distro}/`, (h) => h.endsWith("/"))).map((h) => h.slice(0, -1))
+    )
+    const img = await select(
+      rl, 3, 3, `image of ${distro}/${build}`,
+      await listNames(`${prefix}/${distro}/${build}/`, (h) => h.endsWith(".qcow2"))
+    )
+    config.pve_base_image = { url_prefix: prefix, url_path: `${distro}/${build}`, url_img: img }
+    saveConfig(root, config)
+    console.log("saved to secrets/cli.json")
+  } finally {
+    rl.close()
+  }
 }
 
 export function registerPve(admin: Command, getCtx: () => LoadedConfig): void {
@@ -14,14 +92,20 @@ export function registerPve(admin: Command, getCtx: () => LoadedConfig): void {
     .description("pve helpers")
     .option("--proxmox", "show the proxmox web endpoints")
     .option("--update-firewall", "apply the pve firewall whitelisting all swarm nodes")
+    .option("--base-images", "interactively pick the debian base image and save it to cli.json")
     .action(async (opts: PveOptions) => {
-      if (!opts.proxmox && !opts.updateFirewall) {
+      if (!opts.proxmox && !opts.updateFirewall && !opts.baseImages) {
         pve.outputHelp()
         return
       }
       const { root, config } = getCtx()
       if (!config.pve || config.pve.length === 0) {
         throw new Error("no 'pve' entries in secrets/cli.json")
+      }
+
+      if (opts.baseImages) {
+        await baseImages(getCtx)
+        return
       }
 
       if (opts.proxmox) {
