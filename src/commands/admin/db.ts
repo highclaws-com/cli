@@ -6,6 +6,7 @@ import { escapeShell, runCapture } from "../../exec"
 interface DbOptions {
   entrypoint?: boolean
   lookupNode?: string
+  sshNode?: string
 }
 
 export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
@@ -14,8 +15,9 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
     .description("database access entrypoints")
     .option("--entrypoint", "print web and ssh entrypoints for the db")
     .option("--lookup-node <node_id>", "fuzzy (substring) search a sandbox node_id and print its ProvisionVPS result")
+    .option("--ssh-node <node_id>", "fuzzy (substring) search a sandbox node_id and print ready-to-paste ssh commands")
     .action(async (opts: DbOptions) => {
-      if (!opts.entrypoint && !opts.lookupNode) {
+      if (!opts.entrypoint && !opts.lookupNode && !opts.sshNode) {
         db.outputHelp()
         return
       }
@@ -41,19 +43,21 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
         console.log(lines.join("\n"))
       }
 
-      if (opts.lookupNode) {
-        const sql = `SELECT vps.result FROM "Sandbox" sd JOIN "ProvisionVPS" vps ON sd.provision_id = vps.provision_id WHERE sd.node_id LIKE '%${opts.lookupNode}%';`
+      if (opts.lookupNode || opts.sshNode) {
+        const tag = opts.sshNode ? "ssh-node" : "lookup-node"
+        const nodeId = opts.sshNode ?? opts.lookupNode
+        const sql = `SELECT vps.result FROM "Sandbox" sd JOIN "ProvisionVPS" vps ON sd.provision_id = vps.provision_id WHERE sd.node_id LIKE '%${nodeId}%';`
         const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
         const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
-        console.error(`[lookup-node] node_id=${opts.lookupNode} on db ${target.ip}`)
+        console.error(`[${tag}] node_id=${nodeId} on db ${target.ip}`)
         console.error(`$ ssh -i ${sshKey} ${target.ssh_usr}@${target.ip} ${escapeShell(remote)}`)
         const { code, stdout } = await runCapture("ssh", ["-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote])
         if (code !== 0) {
-          throw new Error(`lookup-node failed (exit ${code})`)
+          throw new Error(`${tag} failed (exit ${code})`)
         }
         const rows = stdout.split("\n").map((l) => l.trimEnd()).filter((l) => l.length > 0)
         if (rows.length === 0) {
-          console.error(`no row found for node_id ${opts.lookupNode}`)
+          console.error(`no row found for node_id ${nodeId}`)
           return
         }
         const values = rows.map((row) => {
@@ -63,7 +67,22 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
             return row
           }
         })
-        console.log(JSON.stringify(values, null, 2))
+        if (opts.sshNode) {
+          const nodeUser = config.swarm?.[0]?.ssh_usr
+          if (!nodeUser) {
+            throw new Error("no swarm entry with ssh_usr in secrets/cli.json")
+          }
+          for (const v of values) {
+            if (typeof v !== "object" || v === null || !Array.isArray(v.public_ips) || !v.public_ips[0] || v.ssh_port === undefined) {
+              console.error("result without public_ips/ssh_port, skipped")
+              continue
+            }
+            console.log(`\x1b[1;32m ssh-keygen -R "[${v.public_ips[0]}]:${v.ssh_port}" \x1b[0m`)
+            console.log(`\x1b[1;32m ssh -i ${target.ssh_key} -p ${v.ssh_port} ${nodeUser}@${v.public_ips[0]} \x1b[0m`)
+          }
+        } else {
+          console.log(JSON.stringify(values, null, 2))
+        }
       }
     })
 }

@@ -99,7 +99,7 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
           throw new Error(`deploy failed (exit ${rc})`)
         }
 
-        console.log(`\n\x1b[1;32m🚀 visit: https://127.0.0.1:9443/\x1b[0m`)
+        console.log(`\n\x1b[1;32m 🚀 visit: https://127.0.0.1:9443/ \x1b[0m`)
         console.log(`[2/2] tunneling 127.0.0.1:9443 to manager ${manager.ip}; keep this session running, ctrl+c to stop`)
         const tunnelArgs = ["-i", key, "-N", "-L", "9443:127.0.0.1:9443", at]
         console.log(`$ ssh -i ${key} -N -L 9443:127.0.0.1:9443 ${at}`)
