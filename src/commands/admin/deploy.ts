@@ -38,6 +38,17 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
         if (!fs.existsSync(path.join(root, "secrets", "config.env"))) {
           throw new Error(`missing ${path.join(root, "secrets", "config.env")}; refusing to upload an incomplete secrets bundle`)
         }
+        for (const [i, n] of (config.pve ?? []).entries()) {
+          console.log(`[secrets] pve ${i + 1}: saving secrets from ${n.ip} as ${n.ssh_usr}`)
+          const rc = await run(
+            "./scripts/pve_save_secrets.sh",
+            [n.ssh_usr, n.ip],
+            { cwd: root, env: { PVE_KEY: path.join(root, n.ssh_key) } }
+          )
+          if (rc !== 0) {
+            throw new Error(`pve save secrets failed for ${n.ip} (exit ${rc})`)
+          }
+        }
         const targets = [
           { name: `swarm manager ${manager.ip}`, node: manager },
           { name: `db ${config.db.ip}`, node: config.db }
