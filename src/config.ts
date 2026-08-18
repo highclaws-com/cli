@@ -71,7 +71,7 @@ export function loadEnv(root: string): Record<string, string> {
 export function extractEnv(env: Record<string, string>, keys: string[]): string[] {
   const missing = keys.filter((k) => env[k] === undefined || env[k] === "")
   if (missing.length > 0) {
-    throw new Error(`missing env var(s) for db entrypoint: ${missing.join(", ")}`)
+    throw new Error(`missing env var(s): ${missing.join(", ")}`)
   }
   return keys.map((k) => env[k] as string)
 }
