@@ -3,28 +3,73 @@ import { Command } from "commander"
 import { LoadedConfig, extractEnv } from "../../config"
 import { escapeShell, run } from "../../exec"
 
+interface ModelsOptions {
+  contextLength?: boolean
+  pool?: boolean
+}
+
 export function registerModels(admin: Command, getCtx: () => LoadedConfig): void {
   const models = admin
     .command("models")
-    .description("fetch and display the public model context")
-    .action(async () => {
-      const { config } = getCtx()
+    .description("inspect model configuration")
+    .option("--context-length", "display the public model context lengths")
+    .option("--pool", "display models available from the model pool")
+    .action(async (opts: ModelsOptions) => {
+      if (!opts.contextLength && !opts.pool) {
+        models.outputHelp()
+        return
+      }
+
+      const { config, env } = getCtx()
       if (!config.domain) {
         throw new Error("no 'domain' key in secrets/cli.json")
       }
-      const url = `https://${config.domain}/connectors/public/model-context`
-      const res = await fetch(url)
-      if (!res.ok) {
-        throw new Error(`request failed: HTTP ${res.status} ${res.statusText}`)
+
+      if (opts.contextLength) {
+        const url = `https://${config.domain}/connectors/public/model-context`
+        const res = await fetch(url)
+        if (!res.ok) {
+          throw new Error(`request failed: HTTP ${res.status} ${res.statusText}`)
+        }
+        const body = await res.text()
+        let pretty = body
+        try {
+          pretty = JSON.stringify(JSON.parse(body), null, 2)
+        } catch {
+          // not JSON; display raw
+        }
+        console.log(pretty)
       }
-      const body = await res.text()
-      let pretty = body
-      try {
-        pretty = JSON.stringify(JSON.parse(body), null, 2)
-      } catch {
-        // not JSON; display raw
+
+      if (opts.pool) {
+        const [managementKey] = extractEnv(env, ["GATEWAY_ADMIN_KEY"])
+        const baseUrl = `https://model-pool.${config.domain}`
+        const keysRes = await fetch(`${baseUrl}/v0/management/api-keys`, {
+          headers: { Authorization: `Bearer ${managementKey}` }
+        })
+        if (!keysRes.ok) {
+          throw new Error(`request failed: HTTP ${keysRes.status} ${keysRes.statusText}`)
+        }
+        const keysBody = await keysRes.json() as { "api-keys"?: string[] }
+        const apiKey = keysBody["api-keys"]?.[0]
+        if (!apiKey) {
+          throw new Error("model pool has no API keys configured")
+        }
+        const modelsRes = await fetch(`${baseUrl}/v1/models`, {
+          headers: { Authorization: `Bearer ${apiKey}` }
+        })
+        if (!modelsRes.ok) {
+          throw new Error(`request failed: HTTP ${modelsRes.status} ${modelsRes.statusText}`)
+        }
+        const body = await modelsRes.text()
+        let pretty = body
+        try {
+          pretty = JSON.stringify(JSON.parse(body), null, 2)
+        } catch {
+          // not JSON; display raw
+        }
+        console.log(pretty)
       }
-      console.log(pretty)
     })
 
   models
