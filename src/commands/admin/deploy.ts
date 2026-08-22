@@ -9,7 +9,6 @@ interface DeployOptions {
   portainer?: boolean
   stack?: boolean
   secrets?: boolean
-  ssh?: boolean
   updateFirewall?: boolean
   pveImage?: boolean
 }
@@ -21,11 +20,10 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
     .option("--secrets", "upload local secrets to the manager swarm node and the db node")
     .option("--stack", "update and deploy the swarm-1 stack on the manager swarm node")
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
-    .option("--ssh", "print ssh commands to log into each manager node")
     .option("--update-firewall", "apply the firewall to all swarm nodes")
     .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
     .action(async (opts: DeployOptions) => {
-      if (!opts.portainer && !opts.stack && !opts.secrets && !opts.ssh && !opts.updateFirewall && !opts.pveImage) {
+      if (!opts.portainer && !opts.stack && !opts.secrets && !opts.updateFirewall && !opts.pveImage) {
         deploy.outputHelp()
         return
       }
@@ -114,13 +112,6 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
         if (tc !== 0) {
           throw new Error(`tunnel ended (exit ${tc})`)
         }
-      }
-
-      if (opts.ssh) {
-        const managers = (config.swarm ?? []).filter((n) => n.manager)
-        managers.forEach((n, i) => {
-          console.log(`\x1b[1;32m [${i + 1}] ssh -i ${n.ssh_key} ${n.ssh_usr}@${n.ip} \x1b[0m`)
-        })
       }
 
       if (opts.pveImage) {
