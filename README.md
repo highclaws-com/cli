@@ -19,6 +19,14 @@ npm run bin:all
 npm link                # expose `hc` as a global command for local use
 ```
 
+## Expose
+
+```sh
+hc expose tcp:43817
+hc expose http:8000
+hc --cloudflared-version 2026.7.0 expose tcp:43817
+```
+
 ## Administration
 
 `admin` is tied to a specific repo checkout. It discovers its configuration by
