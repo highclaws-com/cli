@@ -1,42 +1,55 @@
-# cli
+# hc
 
-The CLI source code for highclaws command-line use or admin operations.
+HighClaws CLI.
 
-## Dev / build
-
-Run all of the following in this directory (requires Node.js >= 18):
-
-```sh
-npm install             # install dependencies
-npm run dev -- <args>   # dev loop: bundle, then run with args
-                        # e.g. npm run dev -- admin db --entrypoint
-npm run typecheck       # tsc --noEmit
-npm run build           # bundle everything into dist/cli.js (run with node)
-npm run bin:linux       # standalone binaries -> bin/ (linux, mac, win, or all)
-npm run bin:mac
-npm run bin:win
-npm run bin:all
-npm link                # expose `hc` as a global command for local use
-```
-
-## Expose
+## Usage
 
 ```sh
 hc expose tcp:43817
 hc expose http:8000
+hc expose https:8443
 hc --cloudflared-version 2026.7.0 expose tcp:43817
 ```
 
-### Expose an OpenAI-compatible API
+## Examples
 
-Generate an API token:
+### SSH
+
+Expose:
+
+```sh
+hc expose tcp:22
+```
+
+Proxy:
+
+```sh
+TUNNEL_HOSTNAME=your-tunnel.trycloudflare.com
+cloudflared access tcp \
+  --hostname "$TUNNEL_HOSTNAME" \
+  --url 127.0.0.1:2222
+```
+
+```sh
+SSH_PASSWORD=your-password
+SSH_USER=your-user
+sshpass -p "$SSH_PASSWORD" ssh \
+  -o PubkeyAuthentication=no \
+  -o StrictHostKeyChecking=no \
+  -p 2222 "$SSH_USER"@localhost \
+  'pwd'
+```
+
+### OpenAI-compatible API
+
+Token:
 
 ```sh
 TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
 printf 'API token: %s\n' "$TOKEN"
 ```
 
-Serve Qwen3.8-27B-FP8:
+Serve:
 
 ```sh
 docker run --rm -it \
@@ -75,7 +88,7 @@ docker run --rm -it \
   --mm-process-config '{"image":{"max_pixels":40000}}'
 ```
 
-Expose it:
+Expose:
 
 ```sh
 hc expose http:30000
@@ -88,12 +101,28 @@ curl http://127.0.0.1:30000/v1/models \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-Test the entrance printed by `hc expose`:
+Test remotely:
 
 ```sh
 URL=https://random-words.trycloudflare.com
 curl "$URL/v1/models" \
   -H "Authorization: Bearer $TOKEN"
+```
+
+## Development
+
+Requires Node.js >= 18.
+
+```sh
+npm install
+npm run dev -- <args>
+npm run typecheck
+npm run build
+npm run bin:linux
+npm run bin:mac
+npm run bin:win
+npm run bin:all
+npm link
 ```
 
 ## Administration
