@@ -8,6 +8,7 @@ import { registerInvite } from "./admin/invite"
 import { registerModels } from "./admin/models"
 import { registerPve } from "./admin/pve"
 import { registerSwarm } from "./admin/swarm"
+import { registerWgConnect } from "./admin/wg-connect"
 
 export function registerAdmin(program: Command): void {
   const admin = program.command("admin").description("admin operations")
@@ -34,4 +35,5 @@ export function registerAdmin(program: Command): void {
   registerModels(admin, getCtx)
   registerPve(admin, getCtx)
   registerSwarm(admin, getCtx)
+  registerWgConnect(admin, getCtx)
 }
