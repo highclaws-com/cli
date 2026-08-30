@@ -7,6 +7,7 @@ interface GenerateOptions {
   max_uses: string
   expiry_hours: string
   trial_hours_addition: string
+  model_quota_dollars_addition: string
 }
 
 export function registerInvite(admin: Command, getCtx: () => LoadedConfig): void {
@@ -18,6 +19,11 @@ export function registerInvite(admin: Command, getCtx: () => LoadedConfig): void
     .option("--max_uses <count>", "maximum number of redemptions", "1")
     .option("--expiry_hours <hours>", "hours until expiration; 0 disables expiry", "42")
     .option("--trial_hours_addition <hours>", "trial hours granted on redemption", "48")
+    .option(
+      "--model_quota_dollars_addition <amount>",
+      "model usage quota granted on redemption, in dollars",
+      "0"
+    )
     .action(async (opts: GenerateOptions) => {
       const { root, config } = getCtx()
       const manager = (config.swarm ?? []).find((node) => node.manager)
@@ -28,7 +34,8 @@ export function registerInvite(admin: Command, getCtx: () => LoadedConfig): void
       const payload = JSON.stringify({
         max_uses: Number(opts.max_uses),
         expiry_hours: Number(opts.expiry_hours),
-        trial_hours_addition: Number(opts.trial_hours_addition)
+        trial_hours_addition: Number(opts.trial_hours_addition),
+        model_quota_dollars_addition: Number(opts.model_quota_dollars_addition)
       })
       const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
       const remote = `${docker} exec $(${docker} ps -q --filter 'name=admission[^_]' | head -n 1) curl -fsS -X POST http://localhost:8000/api/v1/code/generate -H 'X-User-Uid: 1' -H 'Content-Type: application/json' -d ${escapeShell(payload)}`
