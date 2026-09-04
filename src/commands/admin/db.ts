@@ -48,7 +48,7 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
         const nodeId = opts.sshNode ?? opts.lookupNode
         const sql = `SELECT vps.result FROM "Sandbox" sd JOIN "ProvisionVPS" vps ON sd.provision_id = vps.provision_id WHERE sd.node_id LIKE '%${nodeId}%';`
         const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
-        const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
+        const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t -P null=null -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
         console.error(`[${tag}] node_id=${nodeId} on db ${target.ip}`)
         console.error(`$ ssh -i ${sshKey} ${target.ssh_usr}@${target.ip} ${escapeShell(remote)}`)
         const { code, stdout } = await runCapture("ssh", ["-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote])
@@ -73,9 +73,9 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
             throw new Error("no swarm entry with ssh_usr in secrets/cli.json")
           }
           for (const v of values) {
+            console.log(JSON.stringify(v, null, 2))
             if (typeof v !== "object" || v === null || !Array.isArray(v.public_ips) || !v.public_ips[0] || v.ssh_port === undefined) {
-              console.error("result without public_ips/ssh_port, skipped")
-              continue
+              throw new Error("ProvisionVPS result missing public_ips/ssh_port")
             }
             console.log(`\x1b[1;32m ssh-keygen -R "[${v.public_ips[0]}]:${v.ssh_port}" \x1b[0m`)
             console.log(`\x1b[1;32m ssh -i ${target.ssh_key} -p ${v.ssh_port} ${nodeUser}@${v.public_ips[0]} \x1b[0m`)
