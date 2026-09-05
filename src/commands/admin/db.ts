@@ -6,6 +6,7 @@ import { escapeShell, runCapture } from "../../exec"
 interface DbOptions {
   entrypoint?: boolean
   lookupNode?: string
+  removeNode?: string
   sshNode?: string
 }
 
@@ -15,9 +16,10 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
     .description("database access entrypoints")
     .option("--entrypoint", "print web and ssh entrypoints for the db")
     .option("--lookup-node <node_id>", "fuzzy (substring) search a sandbox node_id and print its ProvisionVPS result")
+    .option("--remove-node <node_id>", "delete all database rows for a sandbox node")
     .option("--ssh-node <node_id>", "fuzzy (substring) search a sandbox node_id and print ready-to-paste ssh commands")
     .action(async (opts: DbOptions) => {
-      if (!opts.entrypoint && !opts.lookupNode && !opts.sshNode) {
+      if (!opts.entrypoint && !opts.lookupNode && !opts.removeNode && !opts.sshNode) {
         db.outputHelp()
         return
       }
@@ -28,6 +30,56 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
       }
       const [dbUser, dbPass] = extractEnv(env, ["DB_USER", "DB_PASS"])
       const sshKey = path.join(root, target.ssh_key)
+
+      if (opts.removeNode) {
+        const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
+        const sql = `
+          WITH node AS (
+            SELECT provision_id FROM "Sandbox" WHERE node_id = '${opts.removeNode}'
+          ),
+          vps AS (
+            DELETE FROM "ProvisionVPS" USING node
+            WHERE "ProvisionVPS".provision_id = node.provision_id
+          ),
+          bkt AS (
+            DELETE FROM "ProvisionBkt" USING node
+            WHERE "ProvisionBkt".provision_id = node.provision_id
+          ),
+          proxy AS (
+            DELETE FROM "ProvisionProxy" USING node
+            WHERE "ProvisionProxy".provision_id = node.provision_id
+          ),
+          model_keys AS (
+            DELETE FROM "ModelKeys" USING node
+            WHERE "ModelKeys".provision_id = node.provision_id
+          ),
+          exclusive_keys AS (
+            DELETE FROM "SandboxExclusiveKey" USING node
+            WHERE "SandboxExclusiveKey".provision_id = node.provision_id
+          ),
+          reloads AS (
+            DELETE FROM "SandboxReload" USING node
+            WHERE "SandboxReload".provision_id = node.provision_id
+          ),
+          sandbox AS (
+            DELETE FROM "Sandbox" USING node
+            WHERE "Sandbox".provision_id = node.provision_id
+          )
+          SELECT provision_id FROM node;
+        `
+        const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t` +
+          ` -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
+        const { code, stdout } = await runCapture(
+          "ssh", ["-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote]
+        )
+        if (code !== 0) {
+          throw new Error(`row deletion failed (exit ${code})`)
+        }
+        const provisionId = stdout.trim()
+        if (!provisionId) throw new Error(`node not found: ${opts.removeNode}`)
+        console.log(`deleted node ${opts.removeNode} (provision_id: ${provisionId})`)
+        return
+      }
 
       if (opts.entrypoint) {
         const lines = ["db"]

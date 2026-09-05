@@ -2,12 +2,13 @@ import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
 import { LoadedConfig, saveConfig } from "../../config"
-import { run } from "../../exec"
+import { escapeShell, run, runCapture } from "../../exec"
 
 interface PveOptions {
   proxmox?: boolean
   updateFirewall?: boolean
   baseImages?: boolean
+  removeNodeVm?: string
 }
 
 const DEFAULT_URL_PREFIX = "https://cloud.debian.org/images/cloud"
@@ -93,8 +94,9 @@ export function registerPve(admin: Command, getCtx: () => LoadedConfig): void {
     .option("--proxmox", "show the proxmox web endpoints")
     .option("--update-firewall", "apply the pve firewall whitelisting all swarm nodes")
     .option("--base-images", "interactively pick the debian base image and save it to cli.json")
+    .option("--remove-node-vm <node_id>", "destroy the VM matching a sandbox node_id")
     .action(async (opts: PveOptions) => {
-      if (!opts.proxmox && !opts.updateFirewall && !opts.baseImages) {
+      if (!opts.proxmox && !opts.updateFirewall && !opts.baseImages && !opts.removeNodeVm) {
         pve.outputHelp()
         return
       }
@@ -106,6 +108,35 @@ export function registerPve(admin: Command, getCtx: () => LoadedConfig): void {
       if (opts.baseImages) {
         await baseImages(getCtx)
         return
+      }
+
+      if (opts.removeNodeVm) {
+        const name = `selfhost-${opts.removeNodeVm}`
+        for (const target of config.pve) {
+          const key = path.join(root, target.ssh_key)
+          const at = `${target.ssh_usr}@${target.ip}`
+          const lookupCommand = `qm list | awk -v name=${escapeShell(name)}` +
+            ` '$2 == name {print $1}'`
+          const lookup = await runCapture("ssh", ["-i", key, at, lookupCommand])
+          if (lookup.code !== 0) throw new Error(`VM lookup failed on ${target.ip}`)
+          const vmid = lookup.stdout.trim()
+          if (!vmid) continue
+          console.log(`${vmid} (${name}) on ${target.ip}`)
+          const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+          const answer = (await rl.question("destroy this VM? (y/N) ")).trim().toLowerCase()
+          rl.close()
+          if (answer !== "y" && answer !== "yes") {
+            console.log("skipped, nothing removed")
+            return
+          }
+          const command = `set -e; if qm status ${vmid} | grep -q 'status: running';` +
+            ` then qm stop ${vmid}; qm wait ${vmid}; fi;` +
+            ` qm destroy ${vmid} --destroy-unreferenced-disks 1 --purge 1`
+          const rc = await run("ssh", ["-i", key, at, command])
+          if (rc !== 0) throw new Error(`VM removal failed on ${target.ip} (exit ${rc})`)
+          return
+        }
+        throw new Error(`no PVE VM found with name ${name}`)
       }
 
       if (opts.proxmox) {
