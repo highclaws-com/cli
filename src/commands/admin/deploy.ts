@@ -7,6 +7,7 @@ import { run } from "../../exec"
 
 interface DeployOptions {
   portainer?: boolean
+  removeStack?: boolean
   stack?: boolean
   secrets?: boolean
   updateFirewall?: boolean
@@ -18,12 +19,14 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
     .command("deploy")
     .description("deployment helpers")
     .option("--secrets", "upload local secrets to the manager swarm node and the db node")
+    .option("--remove-stack", "remove the swarm-1 stack and wait for its services")
     .option("--stack", "update and deploy the swarm-1 stack on the manager swarm node")
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
     .option("--update-firewall", "apply the firewall to all swarm nodes")
     .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
     .action(async (opts: DeployOptions) => {
-      if (!opts.portainer && !opts.stack && !opts.secrets && !opts.updateFirewall && !opts.pveImage) {
+      if (!opts.portainer && !opts.removeStack && !opts.stack && !opts.secrets &&
+          !opts.updateFirewall && !opts.pveImage) {
         deploy.outputHelp()
         return
       }
@@ -68,6 +71,27 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
           if (rc !== 0) {
             throw new Error(`secrets upload failed for ${name} (exit ${rc})`)
           }
+        }
+      }
+
+      if (opts.removeStack) {
+        const remoteCmd = `
+          wait_for_stack_down() {
+            local namespace=$1
+            while
+              [ -n "$(${docker} service ls -q --filter label=com.docker.stack.namespace=$namespace)" ] ||
+              [ -n "$(${docker} network ls -q --filter label=com.docker.stack.namespace=$namespace)" ]
+            do
+              echo "waiting for stack $namespace to be removed..."
+              sleep 1
+            done
+          }
+          ${docker} stack rm swarm-1 && wait_for_stack_down swarm-1
+        `
+        console.log(`removing swarm-1 stack on manager ${manager.ip}`)
+        const rc = await run("ssh", ["-i", key, at, remoteCmd])
+        if (rc !== 0) {
+          throw new Error(`stack removal failed (exit ${rc})`)
         }
       }
 
