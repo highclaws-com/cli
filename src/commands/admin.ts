@@ -12,11 +12,14 @@ import { registerSwarm } from "./admin/swarm"
 import { registerWgConnect } from "./admin/wg-connect"
 
 export function registerAdmin(program: Command): void {
-  const admin = program.command("admin").description("admin operations")
+  const admin = program
+    .command("admin")
+    .description("admin operations")
+    .option("--root <dir>", "repo root containing secrets/cli.json")
   let loaded: LoadedConfig | undefined
   admin.hook("preAction", async (_thisCommand, actionCommand) => {
     try {
-      loaded = loadConfig(actionCommand.optsWithGlobals().root as string | undefined)
+      loaded = loadConfig(actionCommand.opts().root as string | undefined)
     } catch {
       throw new Error(
         "admin requires the source code and secret configuration (secrets/cli.json)\n" +

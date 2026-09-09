@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { Command, InvalidArgumentError } from "commander"
-import { ensureCloudflared } from "../cloudflared"
+import { DEFAULT_CLOUDFLARED_VERSION, ensureCloudflared } from "../cloudflared"
 
 async function expose(targetText: string, cloudflaredVersion: string): Promise<void> {
   const match = /^(tcp|https?):(\d+)$/.exec(targetText)
@@ -51,11 +51,16 @@ export function registerExpose(program: Command): void {
   program
     .command("expose <target>")
     .description("expose a local TCP or HTTP service through Cloudflare")
+    .option(
+      "--cloudflared-version <version>",
+      "cloudflared release version",
+      DEFAULT_CLOUDFLARED_VERSION
+    )
     .addHelpText(
       "after",
       "\nExamples:\n  hc expose tcp:43817\n  hc expose http:8000\n  hc expose https:8443"
     )
-    .action((target: string, _options: unknown, command: Command) =>
-      expose(target, command.optsWithGlobals().cloudflaredVersion as string)
+    .action((target: string, options: { cloudflaredVersion: string }) =>
+      expose(target, options.cloudflaredVersion)
     )
 }
