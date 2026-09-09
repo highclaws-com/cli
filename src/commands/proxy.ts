@@ -56,8 +56,8 @@ function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publ
   return { privateKey: keys.privateKey, publicKey: keys.publicKey }
 }
 
-async function proxy(): Promise<void> {
-  const helper = await ensureProxyHelper()
+async function proxy(upgrade: boolean): Promise<void> {
+  const helper = await ensureProxyHelper(upgrade)
   const saved = loadProxyConfig()
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
   const endpoint = await ask(rl, "Server WireGuard Endpoint", saved.endpoint)
@@ -102,5 +102,6 @@ export function registerProxy(program: Command): void {
   program
     .command("proxy")
     .description("proxy sandbox browser egress through this computer")
-    .action(proxy)
+    .option("--upgrade", "download the latest proxy helper")
+    .action((options: { upgrade: boolean }) => proxy(options.upgrade))
 }

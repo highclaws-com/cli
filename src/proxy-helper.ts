@@ -17,13 +17,15 @@ function cacheRoot(): string {
   return path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "hc-cli")
 }
 
-export async function ensureProxyHelper(): Promise<string> {
+export async function ensureProxyHelper(upgrade: boolean): Promise<string> {
   const platform = `${process.platform}-${process.arch}`
   const asset = ASSETS[platform]
   if (!asset) throw new Error(`browser egress proxy is not available for ${platform}`)
 
   const dir = path.join(cacheRoot(), "proxy-helper", platform)
   const executable = path.join(dir, process.platform === "win32" ? "hc-proxy.exe" : "hc-proxy")
+  if (!upgrade && fs.existsSync(executable)) return executable
+
   fs.mkdirSync(dir, { recursive: true })
   console.error(`Downloading browser egress proxy helper for ${platform}...`)
   const response = await fetch(
