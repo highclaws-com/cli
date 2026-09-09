@@ -56,27 +56,37 @@ function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publ
   return { privateKey: keys.privateKey, publicKey: keys.publicKey }
 }
 
-async function proxy(upgrade: boolean): Promise<void> {
-  const helper = await ensureProxyHelper(upgrade)
+async function proxy(options: { reset: boolean; upgrade: boolean }): Promise<void> {
+  const helper = await ensureProxyHelper(options.upgrade)
+  if (options.reset && fs.existsSync(configPath())) {
+    fs.unlinkSync(configPath())
+  }
   const saved = loadProxyConfig()
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-  const endpoint = await ask(rl, "Server WireGuard Endpoint", saved.endpoint)
-  const serverPublicKey = await ask(
-    rl,
-    "Sandbox WireGuard Public Key",
-    saved.serverPublicKey
-  )
-  rl.close()
-  if (!endpoint || !serverPublicKey) {
-    throw new Error("both values shown by the web UI are required")
+  let config: ProxyConfig
+  if (
+    saved.endpoint &&
+    saved.serverPublicKey &&
+    saved.privateKey &&
+    saved.publicKey
+  ) {
+    config = saved as ProxyConfig
+  } else {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    const endpoint = await ask(rl, "Server WireGuard Endpoint", saved.endpoint)
+    const serverPublicKey = await ask(
+      rl,
+      "Sandbox WireGuard Public Key",
+      saved.serverPublicKey
+    )
+    rl.close()
+    if (!endpoint || !serverPublicKey) {
+      throw new Error("both values shown by the web UI are required")
+    }
+    config = { endpoint, serverPublicKey, ...generateKeypair(helper) }
+    saveProxyConfig(config)
   }
 
-  const keys = saved.privateKey && saved.publicKey
-    ? { privateKey: saved.privateKey, publicKey: saved.publicKey }
-    : generateKeypair(helper)
-  saveProxyConfig({ endpoint, serverPublicKey, ...keys })
-
-  console.log(`\nClient WireGuard Public Key:\n${keys.publicKey}`)
+  console.log(`\nClient WireGuard Public Key:\n${config.publicKey}`)
   console.log("Paste this into the web UI, then turn on the Egress Proxy switch.")
   console.log("The proxy is running. Press Ctrl+C to stop it.\n")
 
@@ -103,5 +113,6 @@ export function registerProxy(program: Command): void {
     .command("proxy")
     .description("proxy sandbox browser egress through this computer")
     .option("--upgrade", "download the latest proxy helper")
-    .action((options: { upgrade: boolean }) => proxy(options.upgrade))
+    .option("--reset", "reset the saved configuration and client key")
+    .action(proxy)
 }
