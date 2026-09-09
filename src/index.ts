@@ -6,9 +6,7 @@ import { registerExpose } from "./commands/expose"
 import { registerProxy } from "./commands/proxy"
 
 const program = new Command()
-program
-  .name("hc")
-  .version("0.1.0")
+program.name("hc")
 
 registerAdmin(program)
 registerAuth(program)
