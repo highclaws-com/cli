@@ -4,7 +4,9 @@ import { LoadedConfig } from "../../config"
 import { run } from "../../exec"
 
 interface BackupOptions {
+  all?: boolean
   ca?: boolean
+  db?: boolean
   localSecrets?: boolean
   retentionDays: string
 }
@@ -13,11 +15,13 @@ export function registerBackup(admin: Command, getCtx: () => LoadedConfig): void
   const backup = admin
     .command("backup")
     .description("backup helpers")
+    .option("--all", "back up the CA, database, and local secrets")
     .option("--ca", "back up the step CA volume from the manager swarm node")
+    .option("--db", "back up the full PostgreSQL database")
     .option("--local-secrets", "back up the local secrets directory")
     .option("--retention-days <days>", "retention days for local backup files", "7")
     .action(async (opts: BackupOptions) => {
-      if (!opts.ca && !opts.localSecrets) {
+      if (!opts.all && !opts.ca && !opts.db && !opts.localSecrets) {
         backup.outputHelp()
         return
       }
@@ -25,8 +29,11 @@ export function registerBackup(admin: Command, getCtx: () => LoadedConfig): void
         throw new Error("retention days must be a non-negative integer")
       }
       const { root, config } = getCtx()
+      const backupCa = opts.all || opts.ca
+      const backupDb = opts.all || opts.db
+      const backupLocalSecrets = opts.all || opts.localSecrets
 
-      if (opts.localSecrets) {
+      if (backupLocalSecrets) {
         console.log("[local-secrets] backing up local secrets directory")
         const rc = await run("./scripts/local_secrets_bkup.sh", [root, opts.retentionDays], {
           cwd: root
@@ -36,7 +43,7 @@ export function registerBackup(admin: Command, getCtx: () => LoadedConfig): void
         }
       }
 
-      if (opts.ca) {
+      if (backupCa) {
         const manager = (config.swarm ?? []).find((n) => n.manager)
         if (!manager) {
           throw new Error("no swarm node with manager=true in secrets/cli.json")
@@ -53,6 +60,25 @@ export function registerBackup(admin: Command, getCtx: () => LoadedConfig): void
         const rc = await run("./scripts/ca_bkup.sh", args, { cwd: root })
         if (rc !== 0) {
           throw new Error(`ca backup failed (exit ${rc})`)
+        }
+      }
+
+      if (backupDb) {
+        const target = config.db
+        if (!target) {
+          throw new Error("no 'db' entry in secrets/cli.json")
+        }
+        const args = [
+          target.ip,
+          opts.retentionDays,
+          path.join(root, target.ssh_key),
+          target.ssh_usr === "root" ? "" : "sudo",
+          target.ssh_usr
+        ]
+        console.log(`[db] backing up PostgreSQL from ${target.ip}`)
+        const rc = await run("./scripts/db_bkup.sh", args, { cwd: root })
+        if (rc !== 0) {
+          throw new Error(`database backup failed (exit ${rc})`)
         }
       }
     })
