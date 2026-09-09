@@ -2,6 +2,7 @@
 import { Command } from "commander"
 import { DEFAULT_CLOUDFLARED_VERSION } from "./cloudflared"
 import { registerAdmin } from "./commands/admin"
+import { registerAuth } from "./commands/auth"
 import { registerExpose } from "./commands/expose"
 
 const program = new Command()
@@ -16,6 +17,7 @@ program
   )
 
 registerAdmin(program)
+registerAuth(program)
 registerExpose(program)
 
 program.parseAsync(process.argv).catch((err: Error) => {

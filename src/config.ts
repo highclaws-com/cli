@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import dotenv from "dotenv"
 
@@ -44,7 +45,48 @@ export interface LoadedConfig {
   env: Record<string, string>
 }
 
+export interface UserConfig {
+  jwt: string
+}
+
 const CONFIG_REL = path.join("secrets", "cli.json")
+const USER_CONFIG_REL = path.join(".config", "highclaws", "config.json")
+
+export function getUserConfigPath(): string {
+  return path.join(os.homedir(), USER_CONFIG_REL)
+}
+
+export function loadUserConfig(): UserConfig {
+  const configPath = getUserConfigPath()
+  if (!fs.existsSync(configPath)) {
+    throw new Error("not logged in; run `hc auth login`")
+  }
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Partial<UserConfig>
+    if (!config.jwt || typeof config.jwt !== "string") {
+      throw new Error("missing jwt")
+    }
+    return { jwt: config.jwt }
+  } catch (e) {
+    throw new Error(`failed to read ${configPath}: ${(e as Error).message}`)
+  }
+}
+
+export function saveUserConfig(config: UserConfig): void {
+  const configPath = getUserConfigPath()
+  const configDir = path.dirname(configPath)
+  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 })
+  fs.chmodSync(configDir, 0o700)
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 })
+  fs.chmodSync(configPath, 0o600)
+}
+
+export function clearUserConfig(): void {
+  const configPath = getUserConfigPath()
+  if (fs.existsSync(configPath)) {
+    fs.unlinkSync(configPath)
+  }
+}
 
 export function findRepoRoot(start: string = process.cwd()): string {
   let dir = path.resolve(start)

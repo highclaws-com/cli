@@ -5,6 +5,8 @@ HighClaws CLI.
 ## Usage
 
 ```sh
+hc auth login
+hc auth logout
 hc expose tcp:43817
 hc expose http:8000
 hc expose https:8443

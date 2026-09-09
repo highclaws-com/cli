@@ -5,6 +5,7 @@ import { registerDashboard } from "./admin/dashboard"
 import { registerDb } from "./admin/db"
 import { registerDeploy } from "./admin/deploy"
 import { registerInvite } from "./admin/invite"
+import { registerJwt } from "./admin/jwt"
 import { registerModels } from "./admin/models"
 import { registerPve } from "./admin/pve"
 import { registerSwarm } from "./admin/swarm"
@@ -32,6 +33,7 @@ export function registerAdmin(program: Command): void {
   registerDb(admin, getCtx)
   registerDeploy(admin, getCtx)
   registerInvite(admin, getCtx)
+  registerJwt(admin, getCtx)
   registerModels(admin, getCtx)
   registerPve(admin, getCtx)
   registerSwarm(admin, getCtx)
