@@ -1,0 +1,33 @@
+name: Build proxy helper
+
+on:
+  push:
+    branches: [deploy]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: proxy-helper/go.mod
+          cache-dependency-path: proxy-helper/go.sum
+      - working-directory: proxy-helper
+        run: |
+          go test ./...
+          mkdir ../dist
+          GOOS=linux GOARCH=amd64 go build -o ../dist/hc-proxy-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -o ../dist/hc-proxy-linux-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -o ../dist/hc-proxy-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -o ../dist/hc-proxy-darwin-arm64 .
+          GOOS=windows GOARCH=amd64 go build -o ../dist/hc-proxy-windows-amd64.exe .
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: proxy-helper-deploy
+          name: Proxy helper (deploy)
+          prerelease: true
+          files: dist/*
