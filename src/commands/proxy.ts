@@ -60,7 +60,6 @@ async function proxy(): Promise<void> {
   const helper = await ensureProxyHelper()
   const saved = loadProxyConfig()
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-  console.log("Open Browser -> Actions -> Egress Proxy in the HighClaws web UI.")
   const endpoint = await ask(rl, "Server WireGuard Endpoint", saved.endpoint)
   const serverPublicKey = await ask(
     rl,

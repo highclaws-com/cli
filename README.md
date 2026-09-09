@@ -117,14 +117,22 @@ Requires Node.js >= 18.
 
 ```sh
 npm install
-npm run dev -- <args>
-npm run typecheck
 npm run build
-npm run bin:linux
-npm run bin:mac
-npm run bin:win
-npm run bin:all
 npm link
+hc <command>
+```
+
+After source changes:
+
+```sh
+npm run build
+hc <command>
+```
+
+Build standalone binaries:
+
+```sh
+npm run bin:all
 ```
 
 ## Administration
