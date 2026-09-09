@@ -1,6 +1,6 @@
 import path from "node:path"
 import { Command } from "commander"
-import { LoadedConfig, extractEnv } from "../../config"
+import { AdminContext, extractEnv } from "../../config"
 import { escapeShell, runCapture } from "../../exec"
 
 interface DbOptions {
@@ -10,7 +10,7 @@ interface DbOptions {
   sshNode?: string
 }
 
-export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerDb(admin: Command, getCtx: () => AdminContext): void {
   const db = admin
     .command("db")
     .description("database access entrypoints")
@@ -23,8 +23,8 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
         db.outputHelp()
         return
       }
-      const { root, config, env } = getCtx()
-      const target = config.db
+      const { root, adminConfig, env } = getCtx()
+      const target = adminConfig.db
       if (!target) {
         throw new Error("no 'db' entry in secrets/cli.json")
       }
@@ -120,7 +120,7 @@ export function registerDb(admin: Command, getCtx: () => LoadedConfig): void {
           }
         })
         if (opts.sshNode) {
-          const nodeUser = config.swarm?.[0]?.ssh_usr
+          const nodeUser = adminConfig.swarm?.[0]?.ssh_usr
           if (!nodeUser) {
             throw new Error("no swarm entry with ssh_usr in secrets/cli.json")
           }

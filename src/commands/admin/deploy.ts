@@ -2,7 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
-import { LoadedConfig } from "../../config"
+import { AdminContext } from "../../config"
 import { run } from "../../exec"
 
 interface DeployOptions {
@@ -14,7 +14,7 @@ interface DeployOptions {
   pveImage?: boolean
 }
 
-export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerDeploy(admin: Command, getCtx: () => AdminContext): void {
   const deploy = admin
     .command("deploy")
     .description("deployment helpers")
@@ -30,8 +30,8 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
         deploy.outputHelp()
         return
       }
-      const { root, config } = getCtx()
-      const manager = (config.swarm ?? []).find((n) => n.manager)
+      const { root, adminConfig } = getCtx()
+      const manager = (adminConfig.swarm ?? []).find((n) => n.manager)
       if (!manager) {
         throw new Error("no swarm node with manager=true in secrets/cli.json")
       }
@@ -40,13 +40,13 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
       const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
 
       if (opts.secrets) {
-        if (!config.db) {
+        if (!adminConfig.db) {
           throw new Error("no 'db' entry in secrets/cli.json")
         }
         if (!fs.existsSync(path.join(root, "secrets", "config.env"))) {
           throw new Error(`missing ${path.join(root, "secrets", "config.env")}; refusing to upload an incomplete secrets bundle`)
         }
-        for (const [i, n] of (config.pve ?? []).entries()) {
+        for (const [i, n] of (adminConfig.pve ?? []).entries()) {
           console.log(`[secrets] pve ${i + 1}: saving secrets from ${n.ip} as ${n.ssh_usr}`)
           const rc = await run(
             "./scripts/pve_save_secrets.sh",
@@ -59,7 +59,7 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
         }
         const targets = [
           { name: `swarm manager ${manager.ip}`, node: manager },
-          { name: `db ${config.db.ip}`, node: config.db }
+          { name: `db ${adminConfig.db.ip}`, node: adminConfig.db }
         ]
         for (const { name, node } of targets) {
           console.log(`[secrets] uploading to ${name}`)
@@ -139,8 +139,8 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
       }
 
       if (opts.pveImage) {
-        const img = config.pve_base_image
-        const targets = config.pve ?? []
+        const img = adminConfig.pve_base_image
+        const targets = adminConfig.pve ?? []
         if (targets.length === 0) {
           throw new Error("no 'pve' entries in secrets/cli.json")
         }
@@ -179,7 +179,7 @@ export function registerDeploy(admin: Command, getCtx: () => LoadedConfig): void
       }
 
       if (opts.updateFirewall) {
-        const swarm = config.swarm ?? []
+        const swarm = adminConfig.swarm ?? []
         if (swarm.length === 0) {
           throw new Error("no 'swarm' entries in secrets/cli.json")
         }

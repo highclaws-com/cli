@@ -1,13 +1,13 @@
 import { Command } from "commander"
-import { LoadedConfig } from "../../config"
+import { AdminContext } from "../../config"
 
-export function registerDashboard(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerDashboard(admin: Command, getCtx: () => AdminContext): void {
   const dashboard = admin
     .command("dashboard")
     .description("print the dashboard URLs")
     .action(() => {
-      const { config } = getCtx()
-      const boards = config.dashboards
+      const { adminConfig } = getCtx()
+      const boards = adminConfig.dashboards
       if (!boards || Object.keys(boards).length === 0) {
         throw new Error("no 'dashboards' entries in secrets/cli.json")
       }

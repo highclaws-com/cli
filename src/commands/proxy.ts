@@ -1,47 +1,18 @@
 import { execFileSync, spawn } from "node:child_process"
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
+import {
+  ProxyConfig,
+  getUserConfig,
+  updateUserConfig
+} from "../config"
 import { ensureProxyHelper } from "../proxy-helper"
-
-interface ProxyConfig {
-  endpoint: string
-  serverPublicKey: string
-  privateKey: string
-  publicKey: string
-}
-
-function configPath(): string {
-  return path.join(os.homedir(), ".config", "highclaws", "proxy.json")
-}
-
-function loadProxyConfig(): Partial<ProxyConfig> {
-  const file = configPath()
-  if (!fs.existsSync(file)) return {}
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8")) as Partial<ProxyConfig>
-  } catch (error) {
-    throw new Error(`failed to read ${file}: ${(error as Error).message}`)
-  }
-}
-
-function saveProxyConfig(config: ProxyConfig): void {
-  const file = configPath()
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 })
-  fs.chmodSync(path.dirname(file), 0o700)
-  fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 })
-  fs.chmodSync(file, 0o600)
-}
 
 async function ask(
   rl: readline.Interface,
-  label: string,
-  current?: string
+  label: string
 ): Promise<string> {
-  const answer = (await rl.question(`${label}${current ? ` [${current}]` : ""}: `)).trim()
-  return answer || current || ""
+  return (await rl.question(`${label}: `)).trim()
 }
 
 function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publicKey"> {
@@ -58,32 +29,24 @@ function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publ
 
 async function proxy(options: { reset: boolean; upgrade: boolean }): Promise<void> {
   const helper = await ensureProxyHelper(options.upgrade)
-  if (options.reset && fs.existsSync(configPath())) {
-    fs.unlinkSync(configPath())
-  }
-  const saved = loadProxyConfig()
+  if (options.reset) updateUserConfig("proxy", undefined)
+  const saved = getUserConfig("proxy")
   let config: ProxyConfig
-  if (
-    saved.endpoint &&
-    saved.serverPublicKey &&
-    saved.privateKey &&
-    saved.publicKey
-  ) {
-    config = saved as ProxyConfig
+  if (saved) {
+    config = saved
   } else {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-    const endpoint = await ask(rl, "Server WireGuard Endpoint", saved.endpoint)
+    const endpoint = await ask(rl, "Server WireGuard Endpoint")
     const serverPublicKey = await ask(
       rl,
-      "Sandbox WireGuard Public Key",
-      saved.serverPublicKey
+      "Sandbox WireGuard Public Key"
     )
     rl.close()
     if (!endpoint || !serverPublicKey) {
       throw new Error("both values shown by the web UI are required")
     }
     config = { endpoint, serverPublicKey, ...generateKeypair(helper) }
-    saveProxyConfig(config)
+    updateUserConfig("proxy", config)
   }
 
   console.log(`\nClient WireGuard Public Key:\n${config.publicKey}`)
@@ -91,9 +54,9 @@ async function proxy(options: { reset: boolean; upgrade: boolean }): Promise<voi
   console.log("The proxy is running. Press Ctrl+C to stop it.\n")
 
   const child = spawn(helper, [
-    "serve",
-    "--config", configPath()
-  ], { stdio: "inherit", windowsHide: true })
+    "serve"
+  ], { stdio: ["pipe", "inherit", "inherit"], windowsHide: true })
+  child.stdin.end(JSON.stringify(config))
   const stop = (): void => {
     child.kill()
   }

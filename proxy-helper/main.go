@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -45,7 +44,7 @@ func main() {
 	if os.Args[1] == "keygen" {
 		err = generateKeypair()
 	} else if os.Args[1] == "serve" {
-		err = serve(os.Args[2:])
+		err = serve()
 	} else {
 		err = fmt.Errorf("unknown command %q", os.Args[1])
 	}
@@ -69,22 +68,9 @@ func generateKeypair() error {
 	})
 }
 
-func serve(args []string) error {
-	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
-	configPath := flags.String("config", "", "path to the proxy configuration")
-	if err := flags.Parse(args); err != nil {
-		return err
-	}
-	if *configPath == "" {
-		return errors.New("config is required")
-	}
-	configFile, err := os.Open(*configPath)
-	if err != nil {
-		return fmt.Errorf("open config: %w", err)
-	}
-	defer configFile.Close()
+func serve() error {
 	var config proxyConfig
-	if err := json.NewDecoder(configFile).Decode(&config); err != nil {
+	if err := json.NewDecoder(os.Stdin).Decode(&config); err != nil {
 		return fmt.Errorf("read config: %w", err)
 	}
 

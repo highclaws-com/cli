@@ -1,5 +1,5 @@
 import { Command } from "commander"
-import { loadConfig, LoadedConfig } from "../config"
+import { AdminContext, loadAdminContext } from "../config"
 import { registerBackup } from "./admin/backup"
 import { registerDashboard } from "./admin/dashboard"
 import { registerDb } from "./admin/db"
@@ -16,10 +16,10 @@ export function registerAdmin(program: Command): void {
     .command("admin")
     .description("admin operations")
     .option("--root <dir>", "repo root containing secrets/cli.json")
-  let loaded: LoadedConfig | undefined
+  let loaded: AdminContext | undefined
   admin.hook("preAction", async (_thisCommand, actionCommand) => {
     try {
-      loaded = loadConfig(actionCommand.opts().root as string | undefined)
+      loaded = loadAdminContext(actionCommand.opts().root as string | undefined)
     } catch {
       throw new Error(
         "admin requires the source code and secret configuration (secrets/cli.json)\n" +
@@ -27,7 +27,7 @@ export function registerAdmin(program: Command): void {
       )
     }
   })
-  const getCtx = (): LoadedConfig => {
+  const getCtx = (): AdminContext => {
     if (!loaded) throw new Error("admin context not initialized")
     return loaded
   }

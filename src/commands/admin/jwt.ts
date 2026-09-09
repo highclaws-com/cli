@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import { Command } from "commander"
-import { LoadedConfig } from "../../config"
+import { AdminContext } from "../../config"
 import { runCapture } from "../../exec"
 
 interface JwtOptions {
@@ -122,7 +122,7 @@ async function loginBrowser(
   socket.close()
 }
 
-export function registerJwt(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerJwt(admin: Command, getCtx: () => AdminContext): void {
   admin
     .command("jwt")
     .description("generate a short-lived JWT for a user")
@@ -135,8 +135,8 @@ export function registerJwt(admin: Command, getCtx: () => LoadedConfig): void {
       if (!Number.isSafeInteger(uid) || uid <= 0) {
         throw new Error("--uid must be a positive integer")
       }
-      const { root, config } = getCtx()
-      const manager = (config.swarm ?? []).find((node) => node.manager)
+      const { root, adminConfig } = getCtx()
+      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
       if (!manager) {
         throw new Error("no swarm node with manager=true in secrets/cli.json")
       }

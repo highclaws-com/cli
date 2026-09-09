@@ -1,6 +1,6 @@
 import path from "node:path"
 import { Command } from "commander"
-import { LoadedConfig } from "../../config"
+import { AdminContext } from "../../config"
 import { escapeShell, run, runCapture } from "../../exec"
 
 interface GenerateOptions {
@@ -10,7 +10,7 @@ interface GenerateOptions {
   model_quota_dollars_addition: string
 }
 
-export function registerInvite(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerInvite(admin: Command, getCtx: () => AdminContext): void {
   const invite = admin.command("invite").description("manage invite codes")
 
   invite
@@ -25,8 +25,8 @@ export function registerInvite(admin: Command, getCtx: () => LoadedConfig): void
       "0"
     )
     .action(async (opts: GenerateOptions) => {
-      const { root, config } = getCtx()
-      const manager = (config.swarm ?? []).find((node) => node.manager)
+      const { root, adminConfig } = getCtx()
+      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
       if (!manager) {
         throw new Error("no swarm node with manager=true in secrets/cli.json")
       }
@@ -53,8 +53,8 @@ export function registerInvite(admin: Command, getCtx: () => LoadedConfig): void
     .description("get invite code information through the swarm manager")
     .argument("<code>", "invite code")
     .action(async (code: string) => {
-      const { root, config } = getCtx()
-      const manager = (config.swarm ?? []).find((node) => node.manager)
+      const { root, adminConfig } = getCtx()
+      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
       if (!manager) {
         throw new Error("no swarm node with manager=true in secrets/cli.json")
       }

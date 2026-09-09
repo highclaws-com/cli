@@ -25,7 +25,7 @@ export interface PveBaseImage {
   url_img?: string
 }
 
-export interface CliConfig {
+export interface AdminConfig {
   domain?: string
   dashboards?: Record<string, DashboardEntry>
   swarm?: SshTarget[]
@@ -35,87 +35,105 @@ export interface CliConfig {
   [key: string]: unknown
 }
 
-export function saveConfig(root: string, config: CliConfig): void {
-  fs.writeFileSync(path.join(root, CONFIG_REL), JSON.stringify(config, null, 2) + "\n")
-}
-
-export interface LoadedConfig {
+export interface AdminContext {
   root: string
-  config: CliConfig
+  adminConfig: AdminConfig
   env: Record<string, string>
 }
 
-export interface UserConfig {
+export interface AuthConfig {
   jwt: string
 }
 
-const CONFIG_REL = path.join("secrets", "cli.json")
-const USER_CONFIG_REL = path.join(".config", "highclaws", "config.json")
+const ADMIN_CONFIG_REL = path.join("secrets", "cli.json")
+const USER_CONFIG_DIR = process.platform === "win32"
+  ? path.join(process.env.APPDATA ?? os.homedir(), "highclaws")
+  : process.platform === "darwin"
+    ? path.join(os.homedir(), "Library", "Application Support", "highclaws")
+    : path.join(
+      process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"),
+      "highclaws"
+    )
+export const USER_CONFIG_PATH = path.join(USER_CONFIG_DIR, "config.json")
+const USER_CONFIG_LOCK_PATH = `${USER_CONFIG_PATH}.lock`
 
-export function getUserConfigPath(): string {
-  return path.join(os.homedir(), USER_CONFIG_REL)
+export interface ProxyConfig {
+  endpoint: string
+  serverPublicKey: string
+  privateKey: string
+  publicKey: string
 }
 
-export function loadUserConfig(): UserConfig {
-  const configPath = getUserConfigPath()
-  if (!fs.existsSync(configPath)) {
-    throw new Error("not logged in; run `hc auth login`")
-  }
-  try {
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as Partial<UserConfig>
-    if (!config.jwt || typeof config.jwt !== "string") {
-      throw new Error("missing jwt")
-    }
-    return { jwt: config.jwt }
-  } catch (e) {
-    throw new Error(`failed to read ${configPath}: ${(e as Error).message}`)
-  }
+export interface UserConfig {
+  auth?: AuthConfig
+  proxy?: ProxyConfig
 }
 
-export function saveUserConfig(config: UserConfig): void {
-  const configPath = getUserConfigPath()
-  const configDir = path.dirname(configPath)
-  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 })
-  fs.chmodSync(configDir, 0o700)
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 })
-  fs.chmodSync(configPath, 0o600)
-}
-
-export function clearUserConfig(): void {
-  const configPath = getUserConfigPath()
-  if (fs.existsSync(configPath)) {
-    fs.unlinkSync(configPath)
-  }
-}
-
-export function findRepoRoot(start: string = process.cwd()): string {
-  let dir = path.resolve(start)
+function withUserConfig<T>(callback: (config: UserConfig) => T): T {
+  fs.mkdirSync(USER_CONFIG_DIR, { recursive: true, mode: 0o700 })
+  const deadline = Date.now() + 5000
+  let lock: number
   for (;;) {
-    if (fs.existsSync(path.join(dir, CONFIG_REL))) return dir
-    const parent = path.dirname(dir)
-    if (parent === dir) {
-      throw new Error(`no repo root with ${CONFIG_REL} found above ${start}`)
+    try {
+      lock = fs.openSync(USER_CONFIG_LOCK_PATH, "wx", 0o600)
+      break
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
+      if (Date.now() >= deadline) {
+        throw new Error(`timed out waiting for config lock: ${USER_CONFIG_LOCK_PATH}`)
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
     }
-    dir = parent
+  }
+  try {
+    const config = fs.existsSync(USER_CONFIG_PATH)
+      ? JSON.parse(fs.readFileSync(USER_CONFIG_PATH, "utf8")) as UserConfig
+      : {}
+    return callback(config)
+  } finally {
+    fs.closeSync(lock)
+    fs.unlinkSync(USER_CONFIG_LOCK_PATH)
   }
 }
 
-export function loadConfig(rootOverride?: string): LoadedConfig {
-  const root = path.resolve(rootOverride ?? findRepoRoot())
-  const configPath = path.join(root, CONFIG_REL)
-  if (!fs.existsSync(configPath)) {
-    throw new Error(`config file not found: ${configPath}`)
+export function getUserConfig<K extends keyof UserConfig>(
+  key: K
+): UserConfig[K] {
+  return withUserConfig((config) => config[key])
+}
+
+export function updateUserConfig<K extends keyof UserConfig>(
+  key: K,
+  value: UserConfig[K]
+): void {
+  withUserConfig((config) => {
+    if (value === undefined) {
+      delete config[key]
+    } else {
+      config[key] = value
+    }
+    fs.writeFileSync(USER_CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", {
+      mode: 0o600
+    })
+  })
+}
+
+export function loadAdminContext(rootOverride?: string): AdminContext {
+  let root = path.resolve(rootOverride ?? process.cwd())
+  while (rootOverride === undefined && !fs.existsSync(path.join(root, ADMIN_CONFIG_REL))) {
+    const parent = path.dirname(root)
+    if (parent === root) {
+      throw new Error(`no repo root with ${ADMIN_CONFIG_REL} found`)
+    }
+    root = parent
   }
-  let config: CliConfig
+  const configPath = path.join(root, ADMIN_CONFIG_REL)
+  let adminConfig: AdminConfig
   try {
-    config = JSON.parse(fs.readFileSync(configPath, "utf8")) as CliConfig
+    adminConfig = JSON.parse(fs.readFileSync(configPath, "utf8")) as AdminConfig
   } catch (e) {
     throw new Error(`failed to parse ${configPath}: ${(e as Error).message}`)
   }
-  return { root, config, env: loadEnv(root) }
-}
-
-export function loadEnv(root: string): Record<string, string> {
   const env: Record<string, string> = {}
   // mirror the sourcing order: config.env, then secrets/config.env overrides
   for (const rel of ["config.env", path.join("secrets", "config.env")]) {
@@ -125,7 +143,7 @@ export function loadEnv(root: string): Record<string, string> {
     const text = fs.readFileSync(file, "utf8").replace(/^export\s+/gm, "")
     Object.assign(env, dotenv.parse(text))
   }
-  return env
+  return { root, adminConfig, env }
 }
 
 export function extractEnv(env: Record<string, string>, keys: string[]): string[] {

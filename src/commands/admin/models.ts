@@ -1,6 +1,6 @@
 import path from "node:path"
 import { Command } from "commander"
-import { LoadedConfig, extractEnv } from "../../config"
+import { AdminContext, extractEnv } from "../../config"
 import { escapeShell, run } from "../../exec"
 
 interface ModelsOptions {
@@ -8,7 +8,7 @@ interface ModelsOptions {
   pool?: boolean
 }
 
-export function registerModels(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerModels(admin: Command, getCtx: () => AdminContext): void {
   const models = admin
     .command("models")
     .description("inspect model configuration")
@@ -20,13 +20,13 @@ export function registerModels(admin: Command, getCtx: () => LoadedConfig): void
         return
       }
 
-      const { config, env } = getCtx()
-      if (!config.domain) {
+      const { adminConfig, env } = getCtx()
+      if (!adminConfig.domain) {
         throw new Error("no 'domain' key in secrets/cli.json")
       }
 
       if (opts.contextLength) {
-        const url = `https://${config.domain}/connectors/public/model-context`
+        const url = `https://${adminConfig.domain}/connectors/public/model-context`
         const res = await fetch(url)
         if (!res.ok) {
           throw new Error(`request failed: HTTP ${res.status} ${res.statusText}`)
@@ -43,7 +43,7 @@ export function registerModels(admin: Command, getCtx: () => LoadedConfig): void
 
       if (opts.pool) {
         const [managementKey] = extractEnv(env, ["GATEWAY_ADMIN_KEY"])
-        const baseUrl = `https://model-pool.${config.domain}`
+        const baseUrl = `https://model-pool.${adminConfig.domain}`
         const keysRes = await fetch(`${baseUrl}/v0/management/api-keys`, {
           headers: { Authorization: `Bearer ${managementKey}` }
         })
@@ -80,8 +80,8 @@ export function registerModels(admin: Command, getCtx: () => LoadedConfig): void
     .allowUnknownOption()
     .helpOption("--cli-help", "show this CLI help; pass --help to show the remote script help")
     .action(async (extra: string[], opts: { remoteRoot: string }) => {
-      const { root, config, env } = getCtx()
-      const target = config.db
+      const { root, adminConfig, env } = getCtx()
+      const target = adminConfig.db
       if (!target) {
         throw new Error("no 'db' entry in secrets/cli.json")
       }

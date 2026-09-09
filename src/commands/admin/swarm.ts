@@ -1,15 +1,15 @@
 import path from "node:path"
 import { Command } from "commander"
-import { LoadedConfig } from "../../config"
+import { AdminContext } from "../../config"
 import { run } from "../../exec"
 
-export function registerSwarm(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerSwarm(admin: Command, getCtx: () => AdminContext): void {
   const swarmCommand = admin
     .command("swarm")
     .description("list swarm nodes")
     .action(async () => {
-      const { config } = getCtx()
-      const swarm = config.swarm ?? []
+      const { adminConfig } = getCtx()
+      const swarm = adminConfig.swarm ?? []
       if (swarm.length === 0) {
         throw new Error("no 'swarm' entries in secrets/cli.json")
       }
@@ -29,8 +29,8 @@ export function registerSwarm(admin: Command, getCtx: () => LoadedConfig): void 
         return
       }
 
-      const { root, config } = getCtx()
-      for (const node of config.swarm ?? []) {
+      const { root, adminConfig } = getCtx()
+      for (const node of adminConfig.swarm ?? []) {
         const docker = node.ssh_usr === "root" ? "docker" : "sudo docker"
         const commands = []
         if (opts.containers) commands.push(`${docker} container prune -f`)

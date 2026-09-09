@@ -1,9 +1,9 @@
 import path from "node:path"
 import { Command } from "commander"
-import { LoadedConfig } from "../../config"
+import { AdminContext } from "../../config"
 import { escapeShell, run } from "../../exec"
 
-export function registerWgConnect(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerWgConnect(admin: Command, getCtx: () => AdminContext): void {
   const wgConnect = admin
     .command("wg-connect")
     .description("establish WireGuard connections between deployment nodes")
@@ -12,12 +12,12 @@ export function registerWgConnect(admin: Command, getCtx: () => LoadedConfig): v
     .command("db-swarm")
     .description("connect the db WireGuard client to the swarm manager")
     .action(async () => {
-      const { root, config } = getCtx()
-      const db = config.db
+      const { root, adminConfig } = getCtx()
+      const db = adminConfig.db
       if (!db) {
         throw new Error("no 'db' entry in secrets/cli.json")
       }
-      const manager = (config.swarm ?? []).find((node) => node.manager)
+      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
       if (!manager) {
         throw new Error("no swarm node with manager=true in secrets/cli.json")
       }

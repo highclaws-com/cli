@@ -1,6 +1,6 @@
 import path from "node:path"
 import { Command } from "commander"
-import { LoadedConfig } from "../../config"
+import { AdminContext } from "../../config"
 import { run } from "../../exec"
 
 interface BackupOptions {
@@ -11,7 +11,7 @@ interface BackupOptions {
   retentionDays: string
 }
 
-export function registerBackup(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerBackup(admin: Command, getCtx: () => AdminContext): void {
   const backup = admin
     .command("backup")
     .description("backup helpers")
@@ -28,7 +28,7 @@ export function registerBackup(admin: Command, getCtx: () => LoadedConfig): void
       if (!/^\d+$/.test(opts.retentionDays) || !Number.isSafeInteger(Number(opts.retentionDays))) {
         throw new Error("retention days must be a non-negative integer")
       }
-      const { root, config } = getCtx()
+      const { root, adminConfig } = getCtx()
       const backupCa = opts.all || opts.ca
       const backupDb = opts.all || opts.db
       const backupLocalSecrets = opts.all || opts.localSecrets
@@ -44,7 +44,7 @@ export function registerBackup(admin: Command, getCtx: () => LoadedConfig): void
       }
 
       if (backupCa) {
-        const manager = (config.swarm ?? []).find((n) => n.manager)
+        const manager = (adminConfig.swarm ?? []).find((n) => n.manager)
         if (!manager) {
           throw new Error("no swarm node with manager=true in secrets/cli.json")
         }
@@ -64,7 +64,7 @@ export function registerBackup(admin: Command, getCtx: () => LoadedConfig): void
       }
 
       if (backupDb) {
-        const target = config.db
+        const target = adminConfig.db
         if (!target) {
           throw new Error("no 'db' entry in secrets/cli.json")
         }

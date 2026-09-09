@@ -1,7 +1,8 @@
+import fs from "node:fs"
 import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
-import { LoadedConfig, saveConfig } from "../../config"
+import { AdminContext } from "../../config"
 import { escapeShell, run, runCapture } from "../../exec"
 
 interface PveOptions {
@@ -57,9 +58,9 @@ async function select(
   }
 }
 
-async function baseImages(ctx: () => LoadedConfig): Promise<void> {
-  const { root, config } = ctx()
-  const prev = config.pve_base_image ?? {}
+async function baseImages(ctx: () => AdminContext): Promise<void> {
+  const { root, adminConfig } = ctx()
+  const prev = adminConfig.pve_base_image ?? {}
   console.log("current values in secrets/cli.json:")
   console.log(`  url_prefix : ${prev.url_prefix ?? "empty"}`)
   console.log(`  url_path   : ${prev.url_path ?? "empty"}`)
@@ -79,15 +80,18 @@ async function baseImages(ctx: () => LoadedConfig): Promise<void> {
       rl, 3, 3, `image of ${distro}/${build}`,
       await listNames(`${prefix}/${distro}/${build}/`, (h) => h.endsWith(".qcow2"))
     )
-    config.pve_base_image = { url_prefix: prefix, url_path: `${distro}/${build}`, url_img: img }
-    saveConfig(root, config)
+    adminConfig.pve_base_image = { url_prefix: prefix, url_path: `${distro}/${build}`, url_img: img }
+    fs.writeFileSync(
+      path.join(root, "secrets", "cli.json"),
+      JSON.stringify(adminConfig, null, 2) + "\n"
+    )
     console.log("saved to secrets/cli.json")
   } finally {
     rl.close()
   }
 }
 
-export function registerPve(admin: Command, getCtx: () => LoadedConfig): void {
+export function registerPve(admin: Command, getCtx: () => AdminContext): void {
   const pve = admin
     .command("pve")
     .description("pve helpers")
@@ -100,8 +104,8 @@ export function registerPve(admin: Command, getCtx: () => LoadedConfig): void {
         pve.outputHelp()
         return
       }
-      const { root, config } = getCtx()
-      if (!config.pve || config.pve.length === 0) {
+      const { root, adminConfig } = getCtx()
+      if (!adminConfig.pve || adminConfig.pve.length === 0) {
         throw new Error("no 'pve' entries in secrets/cli.json")
       }
 
@@ -112,7 +116,7 @@ export function registerPve(admin: Command, getCtx: () => LoadedConfig): void {
 
       if (opts.removeNodeVm) {
         const name = `selfhost-${opts.removeNodeVm}`
-        for (const target of config.pve) {
+        for (const target of adminConfig.pve) {
           const key = path.join(root, target.ssh_key)
           const at = `${target.ssh_usr}@${target.ip}`
           const lookupCommand = `qm list | awk -v name=${escapeShell(name)}` +
@@ -140,17 +144,17 @@ export function registerPve(admin: Command, getCtx: () => LoadedConfig): void {
       }
 
       if (opts.proxmox) {
-        config.pve.forEach((n, i) => {
+        adminConfig.pve.forEach((n, i) => {
           console.log(`[${i + 1}] https://${n.ip}:${n.web_port}/ (user: ${n.ssh_usr}, pass: ${n.web_pass})`)
         })
       }
 
       if (opts.updateFirewall) {
-        const swarmIps = (config.swarm ?? []).map((n) => n.ip)
+        const swarmIps = (adminConfig.swarm ?? []).map((n) => n.ip)
         if (swarmIps.length === 0) {
           throw new Error("no 'swarm' entries in secrets/cli.json")
         }
-        for (const [i, n] of config.pve.entries()) {
+        for (const [i, n] of adminConfig.pve.entries()) {
           console.log(`[pve ${i + 1}] applying firewall on ${n.ip}; whitelist: ${swarmIps.join(", ")}`)
           const rc = await run(
             "./scripts/pve_firewall.sh",

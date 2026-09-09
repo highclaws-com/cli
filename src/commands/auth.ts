@@ -1,6 +1,9 @@
 import readline from "node:readline/promises"
 import { Command } from "commander"
-import { clearUserConfig, getUserConfigPath, saveUserConfig } from "../config"
+import {
+  USER_CONFIG_PATH,
+  updateUserConfig
+} from "../config"
 
 const LOGIN_CALLBACK_URL = "https://highclaws.com/u/code"
 const LOGIN_URL = `https://highclaws.com/u/login?next=${encodeURIComponent(LOGIN_CALLBACK_URL)}`
@@ -39,15 +42,15 @@ export function registerAuth(program: Command): void {
       const token = (await rl.question("Paste login code: ")).trim()
       rl.close()
       validateJwt(token)
-      saveUserConfig({ jwt: token })
-      console.log(`Logged in. Credentials saved to ${getUserConfigPath()}`)
+      updateUserConfig("auth", { jwt: token })
+      console.log(`Logged in. Credentials saved to ${USER_CONFIG_PATH}`)
     })
 
   auth
     .command("logout")
     .description("remove local credentials")
     .action(() => {
-      clearUserConfig()
+      updateUserConfig("auth", undefined)
       console.log("Logged out locally.")
     })
 }
