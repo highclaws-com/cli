@@ -42,6 +42,38 @@ sshpass -p "$SSH_PASSWORD" ssh \
   'pwd'
 ```
 
+### Windows SSH server
+
+Admin PowerShell:
+
+```powershell
+# 1. install OpenSSH Server
+# reset sources to avoid the msstore source stalling the install
+winget source reset --force
+winget source update
+winget install "OpenSSH Preview" --source winget
+
+# 2. start sshd and enable it at boot
+Start-Service sshd
+Set-Service sshd -StartupType Automatic
+
+# 3. create a dedicated user with a password
+net user sshagent * /add
+
+# optional: grant admin rights
+net localgroup Administrators sshagent /add
+
+# 4. test SSH locally
+ssh sshagent@localhost
+```
+
+If step 4 fails, check:
+
+```powershell
+Get-Service sshd
+Test-NetConnection localhost -Port 22
+```
+
 ### OpenAI-compatible API
 
 Token:
