@@ -18,9 +18,9 @@
     "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/hc.js",
     "dev": "npm run build --silent && node dist/hc.js",
     "typecheck": "tsc --noEmit",
-    "bin:linux": "pkg dist/hc.js --targets node22-linux-x64,node22-linux-arm64 --fallback-to-source --output bin/hc-linux",
-    "bin:mac": "pkg dist/hc.js --targets node22-macos-x64,node22-macos-arm64 --fallback-to-source --output bin/hc-mac",
-    "bin:win": "pkg dist/hc.js --targets node22-win-x64 --fallback-to-source --output bin/hc-win",
+    "bin:linux": "bun build src/index.ts --compile --target=bun-linux-x64 --outfile bin/hc-linux-x64 && bun build src/index.ts --compile --target=bun-linux-arm64 --outfile bin/hc-linux-arm64",
+    "bin:mac": "bun build src/index.ts --compile --target=bun-darwin-x64 --outfile bin/hc-mac-x64 && bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile bin/hc-mac-arm64",
+    "bin:win": "bun build src/index.ts --compile --target=bun-windows-x64 --windows-icon=assets/hc.ico --outfile bin/hc-win.exe",
     "bin:all": "npm run bin:linux && npm run bin:mac && npm run bin:win"
   },
   "dependencies": {
@@ -29,7 +29,6 @@
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "@yao-pkg/pkg": "^6.22.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }

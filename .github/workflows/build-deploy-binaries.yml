@@ -36,13 +36,53 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm run bin:all
+      - run: npm run bin:linux && npm run bin:mac
+      - run: |
+          codesign --force --sign - bin/hc-mac-x64
+          codesign --force --sign - bin/hc-mac-arm64
+          ./bin/hc-mac-arm64 --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-unix
+          path: bin/*
+
+  build-cli-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run bin:win
+      - run: |
+          ./bin/hc-win.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./bin/hc-win.exe proxy --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-windows
+          path: bin/*
+
+  release-cli:
+    needs: [build-cli, build-cli-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: bin
+          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
