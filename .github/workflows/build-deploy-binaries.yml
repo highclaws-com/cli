@@ -1,4 +1,4 @@
-name: Build proxy helper
+name: Build deploy binaries
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-proxy-helper:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,25 @@ jobs:
           GOOS=windows GOARCH=amd64 go build -o ../dist/hc-proxy-windows-amd64.exe .
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: proxy-helper-deploy
-          name: Proxy helper (deploy)
+          tag_name: proxy-helper
+          name: Proxy helper
           prerelease: true
           files: dist/*
+
+  build-cli:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run bin:all
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: HighClaws CLI
+          prerelease: true
+          files: bin/*

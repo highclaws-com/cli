@@ -29,7 +29,7 @@ export async function ensureProxyHelper(upgrade: boolean): Promise<string> {
   fs.mkdirSync(dir, { recursive: true })
   console.error(`Downloading browser egress proxy helper for ${platform}...`)
   const response = await fetch(
-    `https://github.com/highclaws-com/cli/releases/download/proxy-helper-deploy/${asset}`,
+    `https://github.com/highclaws-com/cli/releases/download/proxy-helper/${asset}`,
     { redirect: "follow" }
   )
   if (!response.ok) throw new Error(`proxy helper download failed: HTTP ${response.status}`)
