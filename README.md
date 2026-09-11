@@ -36,6 +36,13 @@ winget install WinFsp.WinFsp
 
 Or download the MSI from <https://winfsp.dev/rel/>.
 
+## macOS setup
+
+### Mount (macFUSE)
+
+`hc sync mount` uses rclone, which mounts through macFUSE on macOS. Install it
+once from <https://macfuse.io/>.
+
 ## Examples
 
 ### Linux SSH server
@@ -63,6 +70,17 @@ sshpass -p "$SSH_PASSWORD" ssh \
   -o StrictHostKeyChecking=no \
   -p 2222 "$SSH_USER"@localhost \
   'pwd'
+```
+
+### macOS SSH server
+
+Enable Remote Login: **Apple Menu > System Settings > General > Sharing**, then
+toggle on **Remote Login**.
+
+Test locally:
+
+```sh
+ssh "$(whoami)"@localhost
 ```
 
 ### Windows SSH server
