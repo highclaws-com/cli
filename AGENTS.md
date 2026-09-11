@@ -40,15 +40,18 @@ There is no status command. Run any command that needs auth (for example
 error: not logged in: run `hc auth login`
 ```
 
-the user is not logged in. Login is interactive and needs the user:
+the user is not logged in.
 
-1. Run `hc auth login`. It prints a login URL:
-   ```
-   Open this URL in your browser:
-   https://highclaws.com/u/login?next=...
-   ```
-2. Ask the user to open that link, log in, and copy the login code it shows.
-3. Enter that code at the `Paste login code:` prompt.
+You (the agent) run `hc auth login`; the user never has to touch the CLI. It
+prints a login URL:
+
+```
+Open this URL in your browser:
+https://highclaws.com/u/login?next=...
+```
+
+Relay that URL to the user, ask them to open it and log in, then have them give
+you the login code it shows. Enter that code at the `Paste login code:` prompt.
 
 Credentials are saved locally, so every later command works without the user.
 
@@ -90,6 +93,9 @@ and rsync.
 
 ## Sync (WebDAV mount and rsync)
 
+Mounting needs a one-time OS-specific prerequisite (WinFsp on Windows, macFUSE
+on macOS); see [README.md](README.md) (Windows setup / macOS setup).
+
 Mount a worktree over WebDAV (via rclone):
 
 ```sh
@@ -109,12 +115,19 @@ Notes:
 - To stop repeating `--token`, save it once as the default:
   `hc sync --token <token>` (no subcommand). Later `mount`/`rsync` reuse it.
 - `mount` runs in the foreground; Ctrl+C unmounts.
-- One-time mount prerequisites: Windows needs WinFsp
-  (`winget install WinFsp.WinFsp`), macOS needs macFUSE
-  ([macfuse.io](https://macfuse.io/)). rclone (and, on Windows, rsync) download
-  automatically on first use.
+
+### Example — mount a worktree
+
+1. `hc sandbox ls` → pick the sandbox; read `ProvisionProxy_result.host`.
+2. `hc sandbox inspect <host>` → pick a worktree from `disks.disks[].name`.
+3. `hc sandbox get-sync-token <host>` → read `token`.
+4. `hc sync --token <token> mount https://<host>/webdav/<worktree> <mountpoint>`
 
 ## Expose a local service
+
+`hc expose` publishes a local service through a Cloudflare Quick Tunnel. The
+service must already be listening on `127.0.0.1:<port>` (to expose SSH, enable
+an SSH server first — see [README.md](README.md) for per-platform steps).
 
 ```sh
 hc expose tcp:<port>
@@ -122,20 +135,19 @@ hc expose http:<port>
 hc expose https:<port>
 ```
 
-Starts a Cloudflare Quick Tunnel to `127.0.0.1:<port>` and prints the public
-entrance:
+It prints the public entrance:
 
-- `http`/`https`: `Entrance: https://<random>.trycloudflare.com`
-- `tcp`: `Entrance: tcp://<random>.trycloudflare.com?port=<port>`
+- `http`/`https`: `Entrance: https://<random>.trycloudflare.com` — the remote
+  side uses this URL directly.
+- `tcp`: `Entrance: tcp://<random>.trycloudflare.com?port=<port>` — the remote
+  side must first bridge it, then talk to the local port:
+  ```sh
+  cloudflared access tcp --hostname <random>.trycloudflare.com --url 127.0.0.1:<local-port>
+  # then connect to 127.0.0.1:<local-port>
+  ```
 
-Nothing registers this entrance anywhere and it changes on every run, so the
-remote (cloud) agent cannot discover it. The user must pass the printed
-`Entrance:` value to the cloud agent for it to reach the exposed local service.
-Runs in the foreground; Ctrl+C stops it.
-
-## Worked example — "mount my sandbox files"
-
-1. `hc sandbox ls` → pick the sandbox; read `ProvisionProxy_result.host`.
-2. `hc sandbox inspect <host>` → pick a worktree from `disks.disks[].name`.
-3. `hc sandbox get-sync-token <host>` → read `token`.
-4. `hc sync --token <token> mount https://<host>/webdav/<worktree> <mountpoint>`
+Read the `Entrance:` line from the command's output. Nothing registers it
+anywhere and it changes on every run, so the cloud agent cannot discover it:
+give the entrance to the user and tell them to message it to the cloud agent so
+it can reach the exposed local service. `hc expose` runs in the foreground;
+Ctrl+C stops it.
