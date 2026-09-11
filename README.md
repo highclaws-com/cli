@@ -1,21 +1,44 @@
 # hc
 
-HighClaws CLI.
+HighClaws CLI: A CLI tool for exposing your local machine to HighClaws sandboxes, syncing files, and proxying cloud browser egress, etc.
 
 ## Usage
 
 ```sh
+# log in and save the platform JWT
 hc auth login
+# remove the saved credentials
 hc auth logout
+# route sandbox browser egress through this computer
+hc proxy
+# expose a local TCP service through Cloudflare
 hc expose tcp:43817
+# expose a local HTTP service through Cloudflare
 hc expose http:8000
+# expose a local HTTPS service through Cloudflare
 hc expose https:8443
-hc --cloudflared-version 2026.7.0 expose tcp:43817
+# mount a sandbox WebDAV tree
+hc sync --token <token> mount https://<host>/webdav/<worktree> ./dir
+# sync files with rsync
+hc sync --token <token> rsync -ar rsync://rsync@<host>:<port>/data/<worktree> ./dir
 ```
+
+## Windows setup
+
+### Mount (WinFsp)
+
+`hc sync mount` uses rclone, which mounts through WinFsp on Windows. Install it
+once (admin); mounting then runs as a normal user.
+
+```powershell
+winget install WinFsp.WinFsp
+```
+
+Or download the MSI from <https://winfsp.dev/rel/>.
 
 ## Examples
 
-### SSH
+### Linux SSH server
 
 Expose:
 
@@ -74,7 +97,7 @@ Get-Service sshd
 Test-NetConnection localhost -Port 22
 ```
 
-### OpenAI-compatible API
+### Exposing a local model
 
 Token:
 
