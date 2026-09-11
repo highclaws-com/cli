@@ -115,6 +115,9 @@ Notes:
 - To stop repeating `--token`, save it once as the default:
   `hc sync --token <token>` (no subcommand). Later `mount`/`rsync` reuse it.
 - `mount` runs in the foreground; Ctrl+C unmounts.
+- Mounts cache reads by default (`--vfs-cache-mode full`, cache under
+  `<user-cache>/highclaws/rclone/cache`); override with
+  `hc sync mount --vfs-cache-mode <off|minimal|writes|full>`.
 
 ### Example — mount a worktree
 

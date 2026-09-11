@@ -4,7 +4,12 @@ import { spawnSync } from "node:child_process"
 import { Command } from "commander"
 import { getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
-import { DEFAULT_RCLONE_VERSION, ensureRclone } from "../rclone"
+import {
+  DEFAULT_RCLONE_VERSION,
+  DEFAULT_VFS_CACHE_MODE,
+  RCLONE_VFS_CACHE_DIR,
+  ensureRclone
+} from "../rclone"
 import { ensureRsync } from "../rsync"
 
 // The sandbox exposes exactly one sync token per node: the same rsyncd.secrets
@@ -91,6 +96,7 @@ async function mount(
   address: string,
   mountpoint: string,
   version: string,
+  cacheMode: string,
   explicitToken?: string
 ): Promise<void> {
   const executable = await ensureRclone(version)
@@ -105,7 +111,15 @@ async function mount(
   if (process.platform !== "win32") {
     fs.mkdirSync(mountpoint, { recursive: true })
   }
-  const args = ["mount", "HC_SYNC:", mountpoint, "--vfs-cache-mode", "writes"]
+  const args = [
+    "mount",
+    "HC_SYNC:",
+    mountpoint,
+    "--vfs-cache-mode",
+    cacheMode,
+    "--cache-dir",
+    RCLONE_VFS_CACHE_DIR
+  ]
   // Without this macOS labels the volume with the remote name instead of the
   // mountpoint.
   if (process.platform === "darwin") {
@@ -154,9 +168,18 @@ export function registerSync(program: Command): void {
   sync
     .command("mount <address> <mountpoint>")
     .description("mount the sandbox WebDAV tree over the given mountpoint")
+    .option(
+      "--vfs-cache-mode <mode>",
+      "rclone VFS cache mode (off|minimal|writes|full)",
+      DEFAULT_VFS_CACHE_MODE
+    )
     .action((address: string, mountpoint: string, _options: unknown, cmd: Command) => {
-      const opts = cmd.optsWithGlobals() as { token?: string; rcloneVersion: string }
-      return mount(address, mountpoint, opts.rcloneVersion, opts.token)
+      const opts = cmd.optsWithGlobals() as {
+        token?: string
+        rcloneVersion: string
+        vfsCacheMode: string
+      }
+      return mount(address, mountpoint, opts.rcloneVersion, opts.vfsCacheMode, opts.token)
     })
 
   sync
