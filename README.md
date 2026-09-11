@@ -27,6 +27,12 @@ hc sync --token <token> mount https://<host>/webdav/<worktree> ./dir
 hc sync --token <token> rsync -ar rsync://rsync@<host>:<port>/data/<worktree> ./dir
 ```
 
+Mounts cache reads as well as writes by default (`--vfs-cache-mode full`) under
+the standard per-user cache dir (`~/.cache/highclaws/rclone/cache`, or the
+platform equivalent), so random reads from editors and image viewers are served
+locally instead of hitting the network on every seek. Override the mode with
+`hc sync mount --vfs-cache-mode <off|minimal|writes|full>`.
+
 ## Windows setup
 
 ### Mount (WinFsp)

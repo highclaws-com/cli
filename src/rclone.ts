@@ -5,6 +5,16 @@ import { USER_CACHE_DIR } from "./config"
 
 export const DEFAULT_RCLONE_VERSION = "v1.75.1"
 
+// rclone's VFS cache (read-ahead/full-file cache) lives under the standard
+// per-user cache dir, alongside the downloaded rclone binary.
+export const RCLONE_VFS_CACHE_DIR = path.join(USER_CACHE_DIR, "rclone", "cache")
+
+// Cache reads as well as writes. The WebDAV backend is a high-latency network
+// remote, so the default `writes` mode makes every random read (image viewers,
+// editors, anything that seeks) a fresh round trip and is unusably slow. `full`
+// downloads a file once on first access and serves subsequent reads locally.
+export const DEFAULT_VFS_CACHE_MODE = "full"
+
 const PLATFORMS: Record<string, string> = {
   "linux-x64": "linux-amd64",
   "linux-arm64": "linux-arm64",
