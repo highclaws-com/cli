@@ -42,10 +42,11 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       }
 
       if (opts.pool) {
-        const [managementKey] = extractEnv(env, ["GATEWAY_ADMIN_KEY"])
+        // the model pool management password is derived from GATEWAY_VIEWER_KEY (config.env)
+        const [managementKey] = extractEnv(env, ["GATEWAY_VIEWER_KEY"])
         const baseUrl = `https://model-pool.${adminConfig.domain}`
         const keysRes = await fetch(`${baseUrl}/v0/management/api-keys`, {
-          headers: { Authorization: `Bearer ${managementKey}` }
+          headers: { "X-Management-Key": managementKey }
         })
         if (!keysRes.ok) {
           throw new Error(`request failed: HTTP ${keysRes.status} ${keysRes.statusText}`)
