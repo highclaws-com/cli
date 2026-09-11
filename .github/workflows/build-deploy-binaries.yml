@@ -87,5 +87,5 @@ jobs:
         with:
           tag_name: latest
           name: HighClaws CLI
-          prerelease: true
+          prerelease: false
           files: bin/*

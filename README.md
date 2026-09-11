@@ -1,5 +1,7 @@
 # hc
 
+> If you are an AI agent, see [AGENTS.md](AGENTS.md).
+
 HighClaws CLI: A CLI tool for exposing your local machine to HighClaws sandboxes, syncing files, and proxying cloud browser egress, etc.
 
 ## Usage
