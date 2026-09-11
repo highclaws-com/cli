@@ -7,7 +7,7 @@ yourself and act on their output; do not make the user use the terminal unless a
 step below says so.
 
 `hc sandbox ...` prints the raw HighClaws JSON. `hc expose` and `hc sync` print
-the entrance/target they set up. `hc proxy` is not covered here yet.
+the entrance/target they set up.
 
 ## Install
 
@@ -151,3 +151,38 @@ anywhere and it changes on every run, so the cloud agent cannot discover it:
 give the entrance to the user and tell them to message it to the cloud agent so
 it can reach the exposed local service. `hc expose` runs in the foreground;
 Ctrl+C stops it.
+
+## Browser egress
+
+Running `hc proxy` gives the cloud-side agent browser a SOCKS5 egress through the
+machine running it, changing that browser's public IP to that machine's so it
+better matches sites' geographic fingerprint expectations. It prints a **Client
+WireGuard Public Key** and then runs in the foreground — keep it running.
+
+Egress needs two independent states **both** on:
+
+- **Connection** — the WireGuard peer is registered and reachable. Read it with
+  `hc sandbox egress get <host>`: `wg_remote_public_key` must be set and
+  `healthy` must be true.
+- **Switch** — the sandbox is told to use the egress. Read it with
+  `hc sandbox egress get <host> --switch-status`: `enabled` must be true.
+
+They are separate because the peer can be connected while the switch is off (and
+vice versa); if the switch is on but the connection is not healthy, egress still
+fails. Turn on both.
+
+To enable it for a sandbox:
+
+1. `hc sandbox ls` → read `ProvisionProxy_result.host`,
+   `ProvisionProxy_result.upstream_ip`, and `mapped_ports.wireguard`.
+2. `hc sandbox egress get <host>` → read `wg_local_public_key` (the sandbox
+   WireGuard public key).
+3. Start `hc proxy`, giving it the endpoint `<upstream_ip>:<mapped_ports.wireguard>`
+   and that sandbox public key; note the client public key it prints.
+4. `hc sandbox egress set <host> on --public-key <client-public-key>` — registers
+   the peer (connection) and turns the switch on, in one call.
+5. Verify both: `hc sandbox egress get <host>` shows `healthy: true` and
+   `hc sandbox egress get <host> --switch-status` shows `enabled: true`. Turn it
+   off with `hc sandbox egress set <host> off`.
+
+All `hc sandbox egress` output is the raw JSON.
