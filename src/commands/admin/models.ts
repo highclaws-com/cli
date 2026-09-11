@@ -1,10 +1,11 @@
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext, extractEnv } from "../../config"
-import { escapeShell, run } from "../../exec"
+import { escapeShell, run, runCapture } from "../../exec"
 
 interface ModelsOptions {
   contextLength?: boolean
+  price?: boolean
   pool?: boolean
 }
 
@@ -13,14 +14,15 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
     .command("models")
     .description("inspect model configuration")
     .option("--context-length", "display the public model context lengths")
+    .option("--price", "display HighClaws model prices from the billing service")
     .option("--pool", "display models available from the model pool")
     .action(async (opts: ModelsOptions) => {
-      if (!opts.contextLength && !opts.pool) {
+      if (!opts.contextLength && !opts.price && !opts.pool) {
         models.outputHelp()
         return
       }
 
-      const { adminConfig, env } = getCtx()
+      const { root, adminConfig, env } = getCtx()
       if (!adminConfig.domain) {
         throw new Error("no 'domain' key in secrets/cli.json")
       }
@@ -35,6 +37,30 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         let pretty = body
         try {
           pretty = JSON.stringify(JSON.parse(body), null, 2)
+        } catch {
+          // not JSON; display raw
+        }
+        console.log(pretty)
+      }
+
+      if (opts.price) {
+        const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
+        if (!manager) {
+          throw new Error("no swarm node with manager=true in secrets/cli.json")
+        }
+        const sshKey = path.join(root, manager.ssh_key)
+        const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
+        const container = `$(${docker} ps -q --filter 'name=billing[^_]' | head -n 1)`
+        const remote = `${docker} exec ${container} cat /app/model_pricing.json`
+        const { code, stdout } = await runCapture(
+          "ssh", ["-i", sshKey, `${manager.ssh_usr}@${manager.ip}`, remote]
+        )
+        if (code !== 0) {
+          throw new Error(`price fetch failed (exit ${code})`)
+        }
+        let pretty = stdout
+        try {
+          pretty = JSON.stringify(JSON.parse(stdout), null, 2)
         } catch {
           // not JSON; display raw
         }
