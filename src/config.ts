@@ -3,6 +3,10 @@ import os from "node:os"
 import path from "node:path"
 import dotenv from "dotenv"
 
+export const APP_NAME = "highclaws"
+export const APP_DOMAIN = "highclaws.com"
+export const GITHUB_ORG = "highclaws-com"
+
 export interface SshTarget {
   ip: string
   ssh_key: string
@@ -47,15 +51,24 @@ export interface AuthConfig {
 
 const ADMIN_CONFIG_REL = path.join("secrets", "cli.json")
 const USER_CONFIG_DIR = process.platform === "win32"
-  ? path.join(process.env.APPDATA ?? os.homedir(), "highclaws")
+  ? path.join(process.env.APPDATA ?? os.homedir(), APP_NAME)
   : process.platform === "darwin"
-    ? path.join(os.homedir(), "Library", "Application Support", "highclaws")
+    ? path.join(os.homedir(), "Library", "Application Support", APP_NAME)
     : path.join(
       process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"),
-      "highclaws"
+      APP_NAME
     )
 export const USER_CONFIG_PATH = path.join(USER_CONFIG_DIR, "config.json")
 const USER_CONFIG_LOCK_PATH = `${USER_CONFIG_PATH}.lock`
+
+export const USER_CACHE_DIR = process.platform === "win32"
+  ? path.join(process.env.LOCALAPPDATA ?? os.homedir(), APP_NAME)
+  : process.platform === "darwin"
+    ? path.join(os.homedir(), "Library", "Caches", APP_NAME)
+    : path.join(
+      process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"),
+      APP_NAME
+    )
 
 export interface ProxyConfig {
   endpoint: string
@@ -67,6 +80,7 @@ export interface ProxyConfig {
 export interface UserConfig {
   auth?: AuthConfig
   proxy?: ProxyConfig
+  sync_token?: Record<string, string>
 }
 
 function withUserConfig<T>(callback: (config: UserConfig) => T): T {

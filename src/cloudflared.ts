@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process"
 import fs from "node:fs"
-import os from "node:os"
 import path from "node:path"
+import { USER_CACHE_DIR } from "./config"
 
 export const DEFAULT_CLOUDFLARED_VERSION = "2026.8.2"
 
@@ -13,19 +13,12 @@ const ASSETS: Record<string, string> = {
   "win32-x64": "cloudflared-windows-amd64.exe"
 }
 
-function cacheRoot(): string {
-  if (process.platform === "win32") {
-    return path.join(process.env.LOCALAPPDATA ?? os.homedir(), "hc-cli")
-  }
-  return path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), ".cache"), "hc-cli")
-}
-
 export async function ensureCloudflared(version = DEFAULT_CLOUDFLARED_VERSION): Promise<string> {
   const platform = `${process.platform}-${process.arch}`
   const asset = ASSETS[platform]
   if (!asset) throw new Error(`cloudflared is not available for ${platform}`)
 
-  const dir = path.join(cacheRoot(), "cloudflared", version, platform)
+  const dir = path.join(USER_CACHE_DIR, "cloudflared", version, platform)
   const executable = path.join(dir, process.platform === "win32" ? "cloudflared.exe" : "cloudflared")
   if (fs.existsSync(executable)) return executable
 

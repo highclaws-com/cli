@@ -1,12 +1,13 @@
 import readline from "node:readline/promises"
 import { Command } from "commander"
 import {
+  APP_DOMAIN,
   USER_CONFIG_PATH,
   updateUserConfig
 } from "../config"
 
-const LOGIN_CALLBACK_URL = "https://highclaws.com/u/code"
-const LOGIN_URL = `https://highclaws.com/u/login?next=${encodeURIComponent(LOGIN_CALLBACK_URL)}`
+const LOGIN_CALLBACK_URL = `https://${APP_DOMAIN}/u/code`
+const LOGIN_URL = `https://${APP_DOMAIN}/u/login?next=${encodeURIComponent(LOGIN_CALLBACK_URL)}`
 
 function validateJwt(token: string): void {
   const parts = token.split(".")
@@ -35,7 +36,7 @@ export function registerAuth(program: Command): void {
 
   auth
     .command("login")
-    .description("log in through highclaws.com")
+    .description(`log in through ${APP_DOMAIN}`)
     .action(async () => {
       console.log(`Open this URL in your browser:\n${LOGIN_URL}`)
       const rl = readline.createInterface({ input: process.stdin, output: process.stdout })

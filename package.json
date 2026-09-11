@@ -25,7 +25,8 @@
   },
   "dependencies": {
     "commander": "^15.0.0",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import { Command } from "commander"
-import { AdminContext } from "../../config"
+import { AdminContext, APP_DOMAIN, APP_NAME } from "../../config"
 import { runCapture } from "../../exec"
 
 interface JwtOptions {
@@ -72,7 +72,7 @@ async function loginBrowser(
     throw new Error("browser login is supported on Linux only")
   }
 
-  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), "highclaws-browser-"))
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), `${APP_NAME}-browser-`))
   const browser = spawn(
     findBrowser(),
     [
@@ -128,8 +128,8 @@ export function registerJwt(admin: Command, getCtx: () => AdminContext): void {
     .description("generate a short-lived JWT for a user")
     .requiredOption("--uid <uid>", "user UID")
     .option("--hijack-key <key>", "cookie name for browser login", "JWT_Token")
-    .option("--hijack-domain <domain>", "cookie domain for browser login", ".highclaws.com")
-    .option("--open-url <url>", "URL to open after browser login", "https://highclaws.com")
+    .option("--hijack-domain <domain>", "cookie domain for browser login", `.${APP_DOMAIN}`)
+    .option("--open-url <url>", "URL to open after browser login", `https://${APP_DOMAIN}`)
     .action(async (opts: JwtOptions) => {
       const uid = Number(opts.uid)
       if (!Number.isSafeInteger(uid) || uid <= 0) {

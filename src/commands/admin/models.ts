@@ -75,7 +75,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
   models
     .command("scan")
     .description("scan model rows on the db node; extra args pass through to the script")
-    .option("--remote-root <dir>", "source root on the db node", "~/highclaws-core")
+    .requiredOption("--remote-root <dir>", "source root on the db node")
     .argument("[extra ...]")
     .allowUnknownOption()
     .helpOption("--cli-help", "show this CLI help; pass --help to show the remote script help")
