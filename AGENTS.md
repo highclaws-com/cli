@@ -171,18 +171,44 @@ They are separate because the peer can be connected while the switch is off (and
 vice versa); if the switch is on but the connection is not healthy, egress still
 fails. Turn on both.
 
-To enable it for a sandbox:
+### Enable
 
-1. `hc sandbox ls` → read `ProvisionProxy_result.host`,
-   `ProvisionProxy_result.upstream_ip`, and `mapped_ports.wireguard`.
-2. `hc sandbox egress get <host>` → read `wg_local_public_key` (the sandbox
-   WireGuard public key).
-3. Start `hc proxy`, giving it the endpoint `<upstream_ip>:<mapped_ports.wireguard>`
-   and that sandbox public key; note the client public key it prints.
-4. `hc sandbox egress set <host> on --public-key <client-public-key>` — registers
-   the peer (connection) and turns the switch on, in one call.
-5. Verify both: `hc sandbox egress get <host>` shows `healthy: true` and
-   `hc sandbox egress get <host> --switch-status` shows `enabled: true`. Turn it
-   off with `hc sandbox egress set <host> off`.
+`hc proxy` needs two inputs, which it prompts for and saves (later runs do not
+prompt):
+
+- **Endpoint** = `<upstream_ip>:<mapped_ports.wireguard>` from `hc sandbox ls`.
+  `upstream_ip` is inside `ProvisionProxy_result`, which may be a JSON string —
+  parse it.
+- **Sandbox WireGuard Public Key** = `wg_local_public_key` from
+  `hc sandbox egress get <host>`.
+
+Start the proxy first — it prints the **Client WireGuard Public Key** and then
+blocks in the foreground, so run it in a terminal (or background it and read the
+key from its output) and keep it running:
+
+```sh
+hc proxy
+```
+
+While it runs, register that client key and turn the switch on in one call:
+
+```sh
+hc sandbox egress set <host> on --public-key <client-public-key>
+hc sandbox egress get <host>                    # healthy: true
+hc sandbox egress get <host> --switch-status    # enabled: true
+```
+
+`set on --public-key` registers the peer *and* flips the switch; the registration
+waits for the peer to become healthy, so the proxy must already be up. The client
+key is stable across runs; `hc proxy --reset` generates a new one.
+
+### Disable
+
+```sh
+hc sandbox egress set <host> off
+# stop hc proxy (Ctrl+C, or SIGTERM its PID); this also stops its child helper
+```
+
+If `hc proxy` stops, `healthy` becomes false even though the switch stays on.
 
 All `hc sandbox egress` output is the raw JSON.
