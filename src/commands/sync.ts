@@ -58,6 +58,24 @@ async function obscure(executable: string, token: string): Promise<string> {
   return result.stdout.trim()
 }
 
+// cwRsync is a Cygwin build and expects POSIX paths, but Windows users type
+// native paths. Convert local path operands to Cygwin form; options and
+// rsync:// remotes are left untouched.
+function cygwinArgs(args: string[]): string[] {
+  return args.map((arg) => {
+    if (arg.startsWith("-") || arg.startsWith("rsync://")) {
+      return arg
+    } else {
+      const drive = /^([A-Za-z]):[\\/](.*)$/.exec(arg)
+      if (drive) {
+        return `/cygdrive/${drive[1].toLowerCase()}/${drive[2].replace(/\\/g, "/")}`
+      } else {
+        return arg.replace(/\\/g, "/")
+      }
+    }
+  })
+}
+
 async function mount(
   address: string,
   mountpoint: string,
@@ -71,7 +89,11 @@ async function mount(
   const pass = await obscure(executable, token)
 
   console.log(`WebDAV URL: ${parsed.baseAddress}${parsed.subpath}`)
-  fs.mkdirSync(mountpoint, { recursive: true })
+  // Linux and macOS require the mountpoint to exist; WinFsp creates it and
+  // rejects a mountpoint that is already there.
+  if (process.platform !== "win32") {
+    fs.mkdirSync(mountpoint, { recursive: true })
+  }
   console.log(`Mounting ${mountpoint}. Press Ctrl+C to stop it.\n`)
   const code = await run(executable, [
     "mount",
@@ -96,8 +118,9 @@ async function rsync(args: string[], explicitToken?: string): Promise<void> {
   }
   const executable = await ensureRsync()
   const token = syncToken(rsyncHost(args), explicitToken)
-  console.log(`$ rsync ${args.join(" ")}\n`)
-  const code = await run(executable, args, { env: { RSYNC_PASSWORD: token } })
+  const finalArgs = process.platform === "win32" ? cygwinArgs(args) : args
+  console.log(`$ rsync ${finalArgs.join(" ")}\n`)
+  const code = await run(executable, finalArgs, { env: { RSYNC_PASSWORD: token } })
   if (code !== 0) throw new Error(`rsync exited with code ${code}`)
 }
 
