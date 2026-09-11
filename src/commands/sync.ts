@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { Command } from "commander"
 import { getUserConfig, updateUserConfig } from "../config"
@@ -11,16 +12,22 @@ import { ensureRsync } from "../rsync"
 // service (Basic password, username ignored).
 
 interface SyncAddress {
-  baseAddress: string
-  subpath: string
+  tokenAddress: string
+  webdavURL: string
 }
 
-// Rewrite a WebDAV address embedded in rclone arguments into a remote that
-// authenticates with the synced token: the origin becomes the remote URL and
-// the path becomes the remote path.
+// The full WebDAV address becomes the rclone backend URL and the remote root
+// stays empty, so rclone's Statfs/About PROPFINDs the configured path itself.
+// Keeping the path in the remote instead would make About() query the origin
+// and 404. The origin alone keys the saved token.
 function webdavRemote(arg: string): SyncAddress | undefined {
-  const match = /^(https?:\/\/[^/]+)(\/.*)?$/.exec(arg)
-  return match ? { baseAddress: match[1], subpath: match[2] ?? "" } : undefined
+  try {
+    const url = new URL(arg)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined
+    return { tokenAddress: url.origin, webdavURL: arg }
+  } catch {
+    return undefined
+  }
 }
 
 // The rsync daemon uses the same token as the WebDAV service. The host:port is
@@ -85,25 +92,26 @@ async function mount(
   const executable = await ensureRclone(version)
   const parsed = webdavRemote(address)
   if (!parsed) throw new Error(`invalid sandbox address: ${address}`)
-  const token = syncToken(parsed.baseAddress, explicitToken)
+  const token = syncToken(parsed.tokenAddress, explicitToken)
   const pass = await obscure(executable, token)
 
-  console.log(`WebDAV URL: ${parsed.baseAddress}${parsed.subpath}`)
+  console.log(`WebDAV URL: ${parsed.webdavURL}`)
   // Linux and macOS require the mountpoint to exist; WinFsp creates it and
   // rejects a mountpoint that is already there.
   if (process.platform !== "win32") {
     fs.mkdirSync(mountpoint, { recursive: true })
   }
+  const args = ["mount", "HC_SYNC:", mountpoint, "--vfs-cache-mode", "writes"]
+  // Without this macOS labels the volume with the remote name instead of the
+  // mountpoint.
+  if (process.platform === "darwin") {
+    args.push("--volname", path.basename(path.resolve(mountpoint)))
+  }
   console.log(`Mounting ${mountpoint}. Press Ctrl+C to stop it.\n`)
-  const code = await run(executable, [
-    "mount",
-    `HC_SYNC:${parsed.subpath}`,
-    mountpoint,
-    "--vfs-cache-mode", "writes"
-  ], {
+  const code = await run(executable, args, {
     env: {
       RCLONE_CONFIG_HC_SYNC_TYPE: "webdav",
-      RCLONE_CONFIG_HC_SYNC_URL: parsed.baseAddress,
+      RCLONE_CONFIG_HC_SYNC_URL: parsed.webdavURL,
       RCLONE_CONFIG_HC_SYNC_VENDOR: "other",
       RCLONE_CONFIG_HC_SYNC_USER: "rsync",
       RCLONE_CONFIG_HC_SYNC_PASS: pass
