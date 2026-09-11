@@ -40,17 +40,21 @@ function rsyncHost(args: string[]): string | undefined {
   return undefined
 }
 
+// The token store is keyed by WebDAV origin or rsync host:port.
 function syncToken(address: string | undefined, explicitToken?: string): string {
+  // No address uses the "default" key.
+  const key = address ?? "default"
   const tokens = getUserConfig("sync_token") ?? {}
   if (explicitToken) {
-    if (address) updateUserConfig("sync_token", { ...tokens, [address]: explicitToken })
+    updateUserConfig("sync_token", { ...tokens, [key]: explicitToken })
     return explicitToken
-  } else if (address && tokens[address]) {
-    return tokens[address]
-  } else {
-    const targetDesc = address ? ` for ${address}` : ""
-    throw new Error(`sync token is required${targetDesc}: provide --token <token>`)
   }
+  // An address with no saved token uses the default token.
+  const token = tokens[key] ?? tokens.default
+  if (!token) {
+    throw new Error("sync token is required: provide --token <token>")
+  }
+  return token
 }
 
 async function obscure(executable: string, token: string): Promise<string> {
@@ -138,6 +142,14 @@ export function registerSync(program: Command): void {
     .description("sync files with a sandbox worktree")
     .option("--token <token>", "sync token; saved to config once specified")
     .option("--rclone-version <version>", "rclone release tag", DEFAULT_RCLONE_VERSION)
+    .action((options: { token?: string }) => {
+      if (options.token) {
+        syncToken("default", options.token)
+        console.log("Default sync token saved.")
+      } else {
+        sync.help()
+      }
+    })
 
   sync
     .command("mount <address> <mountpoint>")

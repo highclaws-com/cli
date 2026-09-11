@@ -17,6 +17,8 @@ hc expose tcp:43817
 hc expose http:8000
 # expose a local HTTPS service through Cloudflare
 hc expose https:8443
+# save a default sync token so later commands do not need --token
+hc sync --token <token>
 # mount a sandbox WebDAV tree
 hc sync --token <token> mount https://<host>/webdav/<worktree> ./dir
 # sync files with rsync
