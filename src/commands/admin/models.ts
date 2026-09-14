@@ -105,7 +105,6 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
     .option("--remote-root <dir>", "source root on the db node", "~/highclaws-core")
     .argument("[extra ...]")
     .allowUnknownOption()
-    .helpOption("--cli-help", "show this CLI help; pass --help to show the remote script help")
     .action(async (extra: string[], opts: { remoteRoot: string }) => {
       const { root, adminConfig, env } = getCtx()
       const target = adminConfig.db
@@ -123,11 +122,10 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         `{ command -v uv >/dev/null 2>&1 || { wget -qO /tmp/uv-install.sh https://astral.sh/uv/install.sh && sh /tmp/uv-install.sh; }; }`,
         "git fetch --depth=1 origin deploy",
         "git checkout -B deploy origin/deploy",
-        "git submodule update --init --recursive --recommend-shallow",
+        "git submodule update --init app/sandbox_model_proxy",
         `uv run scripts/db_scan_models.py ${escapeShell(sqlLink)}${extras ? " " + extras : ""}`
       ].join(" && ")
       console.log(`[models scan] db node ${target.ip}, remote root ${opts.remoteRoot}`)
-      console.log(`$ ssh -i ${key} ${at} ${escapeShell(remote)}`)
       const rc = await run("ssh", ["-i", key, at, remote])
       if (rc !== 0) {
         throw new Error(`models scan failed (exit ${rc})`)
