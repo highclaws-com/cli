@@ -105,6 +105,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
     .option("--remote-root <dir>", "source root on the db node", "~/highclaws-core")
     .argument("[extra ...]")
     .allowUnknownOption()
+    .helpOption(false)
     .action(async (extra: string[], opts: { remoteRoot: string }) => {
       const { root, adminConfig, env } = getCtx()
       const target = adminConfig.db
@@ -115,16 +116,22 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db`
       const key = path.join(root, target.ssh_key)
       const at = `${target.ssh_usr}@${target.ip}`
+      const help = extra.some((arg) => arg === "-h" || arg === "--help")
       const extras = extra.map(escapeShell).join(" ")
-      const remote = [
+      const common = [
         `cd ${opts.remoteRoot}`,
-        `export PATH="$HOME/.local/bin:$PATH"`,
-        `{ command -v uv >/dev/null 2>&1 || { wget -qO /tmp/uv-install.sh https://astral.sh/uv/install.sh && sh /tmp/uv-install.sh; }; }`,
-        "git fetch --depth=1 origin deploy",
-        "git checkout -B deploy origin/deploy",
-        "git submodule update --init app/sandbox_model_proxy",
-        `uv run scripts/db_scan_models.py ${escapeShell(sqlLink)}${extras ? " " + extras : ""}`
-      ].join(" && ")
+        `export PATH="$HOME/.local/bin:$PATH"`
+      ]
+      const rest = help
+        ? ["uv run scripts/db_scan_models.py -h"]
+        : [
+          `{ command -v uv >/dev/null 2>&1 || { wget -qO /tmp/uv-install.sh https://astral.sh/uv/install.sh && sh /tmp/uv-install.sh; }; }`,
+          "git fetch --depth=1 origin deploy",
+          "git checkout -B deploy origin/deploy",
+          "git submodule update --init app/sandbox_model_proxy",
+          `uv run scripts/db_scan_models.py ${escapeShell(sqlLink)}${extras ? " " + extras : ""}`
+        ]
+      const remote = [...common, ...rest].join(" && ")
       console.log(`[models scan] db node ${target.ip}, remote root ${opts.remoteRoot}`)
       const rc = await run("ssh", ["-i", key, at, remote])
       if (rc !== 0) {
