@@ -73,6 +73,7 @@ async function loginBrowser(
   }
 
   const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), `${APP_NAME}-browser-`))
+  const display = process.env.DISPLAY || (process.env.WAYLAND_DISPLAY ? undefined : ":0")
   const browser = spawn(
     findBrowser(),
     [
@@ -84,7 +85,11 @@ async function loginBrowser(
       "--no-default-browser-check",
       "about:blank"
     ],
-    { detached: true, stdio: "ignore" }
+    {
+      detached: true,
+      env: display ? { ...process.env, DISPLAY: display } : process.env,
+      stdio: "ignore"
+    }
   )
   browser.unref()
 
@@ -148,6 +153,7 @@ export function registerJwt(admin: Command, getCtx: () => AdminContext): void {
         `http://localhost:8000/api/v1/jwt/${uid} -H 'X-User-Uid: 1'`
       const key = path.join(root, manager.ssh_key)
       const at = `${manager.ssh_usr}@${manager.ip}`
+      console.log(`Generating JWT for UID ${uid}...`)
       const { code, stdout } = await runCapture("ssh", ["-i", key, at, remote])
       if (code !== 0) {
         throw new Error(`JWT generation failed (exit ${code})`)
@@ -158,5 +164,6 @@ export function registerJwt(admin: Command, getCtx: () => AdminContext): void {
         throw new Error("response did not include a JWT")
       }
       await loginBrowser(body.token, opts.hijackKey, opts.hijackDomain, opts.openUrl)
+      console.log(`Logged in: ${opts.openUrl}`)
     })
 }
