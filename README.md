@@ -67,9 +67,9 @@ cloudflared access tcp \
 ```
 
 ```sh
-SSH_PASSWORD=your-password
+SSHPASS=your-password
 SSH_USER=your-user
-sshpass -p "$SSH_PASSWORD" ssh \
+sshpass -e ssh \
   -o PubkeyAuthentication=no \
   -o StrictHostKeyChecking=no \
   -p 2222 "$SSH_USER"@localhost \
