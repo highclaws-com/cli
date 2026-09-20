@@ -2,12 +2,22 @@
 
 > See [README.md](README.md) for the human-facing overview.
 
-`hc` is driven by an agent on behalf of a non-technical user. Run the commands
-yourself and act on their output; do not make the user use the terminal unless a
-step below says so.
+## Background
 
-`hc sandbox ...` prints the raw HighClaws JSON. `hc expose` and `hc sync` print
-the entrance/target they set up.
+`hc` is driven by an agent on behalf of a non-technical user. `hc sandbox ...`
+prints the raw HighClaws JSON. `hc expose` and `hc sync` print the entrance/target
+they set up.
+
+## Guidance
+
+Run the commands yourself and act on their output; do not make the user use the
+terminal unless a step below says so.
+
+While the user waits on a simple question and you run several tool calls, send
+one line about what you are doing, then keep going. When they wait on an answer —
+not on finished work, and especially when they are waiting for your next
+instruction — verify less: send the next immediate step even if you are not sure
+it will work, and adjust after they report back. Instant help wins here.
 
 ## Install
 
