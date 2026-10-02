@@ -8,6 +8,7 @@ import { registerInvite } from "./admin/invite"
 import { registerJwt } from "./admin/jwt"
 import { registerModels } from "./admin/models"
 import { registerPve } from "./admin/pve"
+import { registerStorage } from "./admin/storage"
 import { registerSwarm } from "./admin/swarm"
 import { registerWgConnect } from "./admin/wg-connect"
 
@@ -39,6 +40,7 @@ export function registerAdmin(program: Command): void {
   registerJwt(admin, getCtx)
   registerModels(admin, getCtx)
   registerPve(admin, getCtx)
+  registerStorage(admin, getCtx)
   registerSwarm(admin, getCtx)
   registerWgConnect(admin, getCtx)
 }
