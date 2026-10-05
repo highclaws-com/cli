@@ -18,9 +18,9 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
   const deploy = admin
     .command("deploy")
     .description("deployment helpers")
-    .option("--secrets", "upload local secrets to the manager swarm node and the db node")
+    .option("--secrets", "upload local secrets to every swarm node and the db node")
     .option("--remove-stack", "remove the swarm-1 stack and wait for its services")
-    .option("--stack", "update and deploy the swarm-1 stack on the manager swarm node")
+    .option("--stack", "update the checkout on every swarm node, then deploy the swarm-1 stack on the manager")
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
     .option("--update-firewall", "apply the firewall to all swarm nodes")
     .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
@@ -57,8 +57,10 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
             throw new Error(`pve save secrets failed for ${n.ip} (exit ${rc})`)
           }
         }
+        // Every swarm node, not just the manager: services such as rq_worker
+        // run on any node and bind-mount secrets from that node's disk.
         const targets = [
-          { name: `swarm manager ${manager.ip}`, node: manager },
+          ...(adminConfig.swarm ?? []).map((n) => ({ name: `swarm node ${n.ip}`, node: n })),
           { name: `db ${adminConfig.db.ip}`, node: adminConfig.db }
         ]
         for (const { name, node } of targets) {
@@ -99,10 +101,27 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
         if (!manager.src_path) {
           throw new Error("no src_path on the manager swarm node in secrets/cli.json")
         }
-        const stackCmd = [
+        const gitCmd = [
           "git fetch --depth=1 origin deploy",
           "git checkout -B deploy origin/deploy",
-          "git submodule update --init --recursive --recommend-shallow",
+          "git submodule update --init --recursive --recommend-shallow"
+        ].join(" && ")
+        // Update the checkout on every swarm node, not just the manager: bind
+        // mounts read from the disk of the node running the task. All nodes are
+        // provisioned alike, so they share the manager's src_path.
+        for (const n of adminConfig.swarm ?? []) {
+          const shell = n.ssh_usr === "root" ? "bash" : "sudo bash"
+          const remoteCmd = `${shell} -c 'cd ${manager.src_path} && ${gitCmd}'`
+          const nodeKey = path.join(root, n.ssh_key)
+          const nodeAt = `${n.ssh_usr}@${n.ip}`
+          console.log(`updating checkout on swarm node ${n.ip}`)
+          console.log(`$ ssh -i ${nodeKey} ${nodeAt} -- ${remoteCmd}`)
+          const rc = await run("ssh", ["-i", nodeKey, nodeAt, "--", remoteCmd])
+          if (rc !== 0) {
+            throw new Error(`checkout update failed on ${n.ip} (exit ${rc})`)
+          }
+        }
+        const stackCmd = [
           "source config.env",
           "docker stack deploy --prune --compose-file swarm_service.yml swarm-1 --detach=false --with-registry-auth"
         ].join(" && ")
