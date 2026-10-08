@@ -4,6 +4,7 @@ import { AdminContext, extractEnv } from "../../config"
 import { escapeShell, runCapture } from "../../exec"
 
 interface DbOptions {
+  blockBilling?: string
   entrypoint?: boolean
   lookupNode?: string
   removeNode?: string
@@ -14,16 +15,40 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
   const db = admin
     .command("db")
     .description("database access entrypoints")
+    .option("--block-billing <email>", "block purchases for an email (normalized by the auth service)")
     .option("--entrypoint", "print web and ssh entrypoints for the db")
     .option("--lookup-node <node_id>", "fuzzy (substring) search a sandbox node_id and print its ProvisionVPS result")
     .option("--remove-node <node_id>", "delete all database rows for a sandbox node")
     .option("--ssh-node <node_id>", "fuzzy (substring) search a sandbox node_id and print ready-to-paste ssh commands")
     .action(async (opts: DbOptions) => {
-      if (!opts.entrypoint && !opts.lookupNode && !opts.removeNode && !opts.sshNode) {
+      if (
+        !opts.blockBilling && !opts.entrypoint && !opts.lookupNode &&
+        !opts.removeNode && !opts.sshNode
+      ) {
         db.outputHelp()
         return
       }
       const { root, adminConfig, env } = getCtx()
+
+      if (opts.blockBilling) {
+        const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
+        if (!manager) {
+          throw new Error("no swarm node with manager=true in secrets/cli.json")
+        }
+        const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
+        const container = `$(${docker} ps -q --filter 'name=_auth\\.' | head -n 1)`
+        const remote = `${docker} exec ${container} node database.js` +
+          ` --block-billing ${escapeShell(opts.blockBilling)}`
+        const { code, stdout } = await runCapture(
+          "ssh", ["-i", path.join(root, manager.ssh_key), `${manager.ssh_usr}@${manager.ip}`, remote]
+        )
+        if (code !== 0) {
+          throw new Error(`block-billing failed (exit ${code})`)
+        }
+        console.log(stdout.trim())
+        return
+      }
+
       const target = adminConfig.db
       if (!target) {
         throw new Error("no 'db' entry in secrets/cli.json")
