@@ -8,6 +8,7 @@ interface ModelsOptions {
   contextLength?: boolean
   price?: boolean
   pool?: boolean
+  allowlist?: boolean
 }
 
 export function registerModels(admin: Command, getCtx: () => AdminContext): void {
@@ -17,8 +18,9 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
     .option("--context-length", "display the public model context lengths from the live connector service")
     .option("--price", "display model prices from the live billing service")
     .option("--pool", "display models available from the live model-pool service")
+    .option("--allowlist", "display the admin (uid=1) model rows the model-pool allowlist is built from, including hidden ones")
     .action(async (opts: ModelsOptions) => {
-      if (!opts.contextLength && !opts.price && !opts.pool) {
+      if (!opts.contextLength && !opts.price && !opts.pool && !opts.allowlist) {
         models.outputHelp()
         return
       }
@@ -97,6 +99,32 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
           // not JSON; display raw
         }
         console.log(pretty)
+      }
+
+      if (opts.allowlist) {
+        const target = adminConfig.db
+        if (!target) {
+          throw new Error("no 'db' entry in secrets/cli.json")
+        }
+        const [dbUser, dbPass] = extractEnv(env, ["DB_USER", "DB_PASS"])
+        const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
+        // The gateway allows every model_id below; a "_" name prefix
+        // (e.g. "_foo") only hides the row from the free_models list.
+        const sql = `
+          SELECT name, model_id, created_at
+          FROM "Models"
+          WHERE user_uid = 1
+          ORDER BY model_id, name;
+        `
+        const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q` +
+          ` -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
+        const { code, stdout } = await runCapture(
+          "ssh", ["-i", path.join(root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote]
+        )
+        if (code !== 0) {
+          throw new Error(`allowlist query failed (exit ${code})`)
+        }
+        console.log(stdout.trimEnd())
       }
     })
 
