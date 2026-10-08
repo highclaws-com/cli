@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto"
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext, extractEnv } from "../../config"
@@ -13,9 +14,9 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
   const models = admin
     .command("models")
     .description("inspect model configuration")
-    .option("--context-length", "display the public model context lengths")
-    .option("--price", "display HighClaws model prices from the billing service")
-    .option("--pool", "display models available from the model pool")
+    .option("--context-length", "display the public model context lengths from the live connector service")
+    .option("--price", "display model prices from the live billing service")
+    .option("--pool", "display models available from the live model-pool service")
     .action(async (opts: ModelsOptions) => {
       if (!opts.contextLength && !opts.price && !opts.pool) {
         models.outputHelp()
@@ -137,5 +138,47 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       if (rc !== 0) {
         throw new Error(`models scan failed (exit ${rc})`)
       }
+    })
+
+  models
+    .command("issue-manual-key")
+    .description("issue a model pool key not bound to any sandbox, billed to <uid>")
+    .argument("<uid>", "user id with an active subscription")
+    .action(async (uidArg: string) => {
+      const uid = Number(uidArg)
+      if (!Number.isInteger(uid) || uid <= 0) {
+        throw new Error(`invalid uid: ${uidArg}`)
+      }
+      const { root, adminConfig, env } = getCtx()
+      const target = adminConfig.db
+      if (!target) {
+        throw new Error("no 'db' entry in secrets/cli.json")
+      }
+      const [dbUser, dbPass] = extractEnv(env, ["DB_USER", "DB_PASS"])
+      const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
+      const sshKey = path.join(root, target.ssh_key)
+      const apiKey = `vk-${randomBytes(32).toString("base64url")}`
+      // Only a subscriber is billed and capped, and billing revokes the key
+      // when the subscription ends.
+      const sql = `
+        INSERT INTO "ModelKeys" (user_uid, provision_id, api_key)
+        SELECT uid, 'manual', '${apiKey}'
+        FROM "BillingSubs"
+        WHERE uid = ${uid}
+          AND paygate_status IN ('active', 'trialing', 'past_due')
+        RETURNING api_key;
+      `
+      const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t` +
+        ` -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
+      const { code, stdout } = await runCapture(
+        "ssh", ["-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote]
+      )
+      if (code !== 0) {
+        throw new Error(`manual key insert failed (exit ${code})`)
+      }
+      if (!stdout.trim()) {
+        throw new Error(`uid ${uid} has no active subscription`)
+      }
+      console.log(stdout.trim())
     })
 }
