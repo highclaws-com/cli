@@ -186,11 +186,15 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
       const sshKey = path.join(root, target.ssh_key)
       const apiKey = `vk-${randomBytes(32).toString("base64url")}`
+      // Unique per manual key, e.g. `manual-3f9a1c0b7e2d4a56`, so the
+      // one-unrevoked-key-per-(user_uid, provision_id) index allows many
+      // manual keys per user.
+      const provisionId = `manual-${randomBytes(8).toString("hex")}`
       // Only a subscriber is billed and capped, and billing revokes the key
       // when the subscription ends.
       const sql = `
         INSERT INTO "ModelKeys" (user_uid, provision_id, api_key)
-        SELECT uid, 'manual', '${apiKey}'
+        SELECT uid, '${provisionId}', '${apiKey}'
         FROM "BillingSubs"
         WHERE uid = ${uid}
           AND paygate_status IN ('active', 'trialing', 'past_due')
