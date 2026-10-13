@@ -8,7 +8,7 @@ import { USER_CACHE_DIR, getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
 
 // Reverse-forwards the sandbox's 127.0.0.1:2222 to this computer's sshd on
-// port 22. The key is base64 of
+// port 22. The key is <fingerprint>.<base64>, with base64 encoding
 // {"key": "<OpenSSH private key>", "host_key": "ssh-ed25519 ..."}.
 async function reverseSsh(options: {
   endpoint?: string
@@ -23,13 +23,14 @@ async function reverseSsh(options: {
     const prompt = readline.createInterface({ input: process.stdin, output: process.stdout })
     try {
       if (!endpoint) endpoint = (await prompt.question("Sandbox IP:PORT: ")).trim()
-      if (!key) key = (await prompt.question("Sandbox key (base64): ")).trim()
+      if (!key) key = (await prompt.question("Sandbox key: ")).trim()
     } finally {
       prompt.close()
     }
   }
 
-  const decoded = JSON.parse(Buffer.from(key, "base64").toString("utf8"))
+  const [, payload] = key.split(".")
+  const decoded = JSON.parse(Buffer.from(payload, "base64").toString("utf8"))
   const dir = path.join(USER_CACHE_DIR, "reverse-ssh")
   const keyFile = path.join(dir, "key")
   const knownHostsFile = path.join(dir, "known_hosts")
@@ -93,7 +94,7 @@ export function registerReverseSsh(program: Command): void {
     .command("reverse-ssh")
     .description("let the sandbox reach this computer's SSH server (port 22)")
     .option("--endpoint <ip:port>", "sandbox IP and SSH tunnel port; saved")
-    .option("--key <key>", "base64 key from `hc sandbox get-ssh-key`; saved")
+    .option("--key <key>", "key from `hc sandbox get-ssh-key`; saved")
     .option("--reset", "clear saved endpoint and key")
     .action(reverseSsh)
 }
