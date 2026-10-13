@@ -17,6 +17,11 @@ async function getSyncToken(host: string): Promise<void> {
   console.log(await apiRequest(url))
 }
 
+async function getSshKey(host: string): Promise<void> {
+  const url = `${hostBase(host)}/mgr/api/v1/ssh/key`
+  console.log(await apiRequest(url))
+}
+
 // Browser egress WireGuard info (keys, health), or the switch status.
 async function egressGet(host: string, switchStatus?: boolean): Promise<void> {
   const url = switchStatus
@@ -59,6 +64,11 @@ export function registerSandbox(program: Command): void {
     .command("get-sync-token <host>")
     .description("fetch a sandbox rsync sync token")
     .action(getSyncToken)
+
+  sandbox
+    .command("get-ssh-key <host>")
+    .description("print the base64 key for `hc reverse-ssh --key`")
+    .action(getSshKey)
 
   const egress = sandbox
     .command("egress")
