@@ -1,4 +1,6 @@
 import fs from "node:fs"
+import { spawn } from "node:child_process"
+import { once } from "node:events"
 import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
@@ -53,11 +55,11 @@ async function reverseSsh(options: {
     fs.chmodSync(keyFile, 0o600)
   }
   fs.writeFileSync(knownHostsFile, `sandbox ${decoded.host_key}\n`)
-  updateUserConfig("reverse_ssh", { endpoint, key })
 
   const [ip, port] = endpoint.split(":")
-  const code = await run("ssh", [
+  const child = spawn("ssh", [
     "-N",
+    "-o", "BatchMode=yes",
     "-o", "LogLevel=VERBOSE",
     "-o", "ExitOnForwardFailure=yes",
     "-o", "HostKeyAlias=sandbox",
@@ -67,8 +69,23 @@ async function reverseSsh(options: {
     "-i", keyFile,
     "-p", port,
     `tunnel@${ip}`
-  ])
-  if (code !== 0) throw new Error(`ssh exited with code ${code}`)
+  ], { stdio: "inherit" })
+  let interrupted = false
+  const onInterrupt = () => {
+    interrupted = true
+    child.kill("SIGINT")
+  }
+  process.on("SIGINT", onInterrupt)
+  try {
+    const [code, signal] = await once(child, "close")
+    if (code !== 0 && !interrupted && signal !== "SIGINT") {
+      throw new Error(`ssh exited with code ${code}`)
+    }
+    // Save on normal exit or Ctrl+C; SSH errors skip saving.
+    updateUserConfig("reverse_ssh", { endpoint, key })
+  } finally {
+    process.off("SIGINT", onInterrupt)
+  }
 }
 
 export function registerReverseSsh(program: Command): void {
