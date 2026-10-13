@@ -8,7 +8,12 @@ import { run } from "../exec"
 // Reverse-forwards the sandbox's 127.0.0.1:2222 to this computer's sshd on
 // port 22. The key is base64 of
 // {"key": "<OpenSSH private key>", "host_key": "ssh-ed25519 ..."}.
-async function reverseSsh(options: { endpoint?: string; key?: string }): Promise<void> {
+async function reverseSsh(options: {
+  endpoint?: string
+  key?: string
+  reset?: boolean
+}): Promise<void> {
+  if (options.reset) updateUserConfig("reverse_ssh", undefined)
   const saved = getUserConfig("reverse_ssh")
   let endpoint = options.endpoint ?? saved?.endpoint
   let key = options.key ?? saved?.key
@@ -72,5 +77,6 @@ export function registerReverseSsh(program: Command): void {
     .description("let the sandbox reach this computer's SSH server (port 22)")
     .option("--endpoint <ip:port>", "sandbox IP and SSH tunnel port; saved")
     .option("--key <key>", "base64 key from `hc sandbox get-ssh-key`; saved")
+    .option("--reset", "clear saved endpoint and key")
     .action(reverseSsh)
 }
