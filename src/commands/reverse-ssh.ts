@@ -69,13 +69,7 @@ export function registerReverseSsh(program: Command): void {
   program
     .command("reverse-ssh")
     .description("let the sandbox reach this computer's SSH server (port 22)")
-    .option(
-      "--endpoint <ip:port>",
-      "the sandbox's IP and SSH tunnel port, e.g. 203.0.113.5:11542; saved for next time"
-    )
-    .option(
-      "--key <key>",
-      "the base64 key printed by `hc sandbox get-ssh-key`; saved for next time"
-    )
+    .option("--endpoint <ip:port>", "sandbox IP and SSH tunnel port; saved")
+    .option("--key <key>", "base64 key from `hc sandbox get-ssh-key`; saved")
     .action(reverseSsh)
 }
