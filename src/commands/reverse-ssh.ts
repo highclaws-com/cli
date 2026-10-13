@@ -53,6 +53,7 @@ async function reverseSsh(options: { endpoint?: string; key?: string }): Promise
   const [ip, port] = endpoint.split(":")
   const code = await run("ssh", [
     "-N",
+    "-o", "LogLevel=VERBOSE",
     "-o", "ExitOnForwardFailure=yes",
     "-o", "HostKeyAlias=sandbox",
     "-o", `UserKnownHostsFile="${knownHostsFile.split(path.sep).join("/")}"`,
