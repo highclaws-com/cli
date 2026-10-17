@@ -8,6 +8,7 @@ import { run } from "../../exec"
 interface DeployOptions {
   portainer?: boolean
   removeStack?: boolean
+  checkout?: boolean
   stack?: boolean
   secrets?: boolean
   updateFirewall?: boolean
@@ -20,13 +21,14 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
     .description("deployment helpers")
     .option("--secrets", "upload local secrets to every swarm node and the db node")
     .option("--remove-stack", "remove the swarm-1 stack and wait for its services")
+    .option("--checkout", "update the checkout on every swarm node without deploying services")
     .option("--stack", "update the checkout on every swarm node, then deploy the swarm-1 stack on the manager")
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
     .option("--update-firewall", "apply the firewall to all swarm nodes")
     .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
     .action(async (opts: DeployOptions) => {
-      if (!opts.portainer && !opts.removeStack && !opts.stack && !opts.secrets &&
-          !opts.updateFirewall && !opts.pveImage) {
+      if (!opts.portainer && !opts.removeStack && !opts.checkout &&
+          !opts.stack && !opts.secrets && !opts.updateFirewall && !opts.pveImage) {
         deploy.outputHelp()
         return
       }
@@ -97,7 +99,7 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
         }
       }
 
-      if (opts.stack) {
+      if (opts.checkout || opts.stack) {
         if (!manager.src_path) {
           throw new Error("no src_path on the manager swarm node in secrets/cli.json")
         }
@@ -121,6 +123,9 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
             throw new Error(`checkout update failed on ${n.ip} (exit ${rc})`)
           }
         }
+      }
+
+      if (opts.stack) {
         const stackCmd = [
           "source config.env",
           "docker stack deploy --prune --compose-file swarm_service.yml swarm-1 --detach=false --with-registry-auth"
