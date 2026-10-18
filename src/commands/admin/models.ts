@@ -213,4 +213,18 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       }
       console.log(stdout.trim())
     })
+
+  models
+    .command("revoke-manual-key")
+    .description("revoke the manual model pool key with row <id>")
+    .argument("<id>", "ModelKeys row id")
+    .action(async (id: string) => {
+      const { root, adminConfig, env } = getCtx()
+      const target = adminConfig.db!
+      const [dbUser, dbPass] = extractEnv(env, ["DB_USER", "DB_PASS"])
+      const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
+      const sql = `UPDATE "ModelKeys" SET revoked_at = now() WHERE id = ${id};`
+      const remote = `docker exec db_1-db-1 psql -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
+      await run("ssh", ["-i", path.join(root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote])
+    })
 }
