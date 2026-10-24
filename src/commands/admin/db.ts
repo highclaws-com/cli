@@ -1,7 +1,7 @@
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext, extractEnv } from "../../config"
-import { escapeShell, runCapture } from "../../exec"
+import { escapeShell, run, runCapture } from "../../exec"
 
 interface DbOptions {
   blockBilling?: string
@@ -9,6 +9,7 @@ interface DbOptions {
   lookupNode?: string
   removeNode?: string
   sshNode?: string
+  webui?: boolean
 }
 
 export function registerDb(admin: Command, getCtx: () => AdminContext): void {
@@ -20,10 +21,11 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
     .option("--lookup-node <node_id>", "fuzzy (substring) search a sandbox node_id and print its ProvisionVPS result")
     .option("--remove-node <node_id>", "delete all database rows for a sandbox node")
     .option("--ssh-node <node_id>", "fuzzy (substring) search a sandbox node_id and print ready-to-paste ssh commands")
+    .option("--webui", "open the local tunnel to the pgweb UI on the db node")
     .action(async (opts: DbOptions) => {
       if (
         !opts.blockBilling && !opts.entrypoint && !opts.lookupNode &&
-        !opts.removeNode && !opts.sshNode
+        !opts.removeNode && !opts.sshNode && !opts.webui
       ) {
         db.outputHelp()
         return
@@ -106,17 +108,28 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
         return
       }
 
-      if (opts.entrypoint) {
-        const lines = ["db"]
-        if (target.web_port) {
-          lines.push(`  web : http://${target.ip}:${target.web_port}  (pgweb)`)
+      if (opts.webui) {
+        // pgweb listens on 127.0.0.1:5433 on the db node (db_client.yml).
+        const at = `${target.ssh_usr}@${target.ip}`
+        console.log(`\n\x1b[1;32m 🚀 visit: http://127.0.0.1:5433/ \x1b[0m`)
+        console.log(`tunneling 127.0.0.1:5433 to db ${target.ip}; keep this session running, ctrl+c to stop`)
+        console.log(`$ ssh -i ${sshKey} -N -L 5433:127.0.0.1:5433 ${at}`)
+        const tc = await run("ssh", ["-i", sshKey, "-N", "-L", "5433:127.0.0.1:5433", at])
+        if (tc !== 0) {
+          throw new Error(`tunnel ended (exit ${tc})`)
         }
-        lines.push(
+        return
+      }
+
+      if (opts.entrypoint) {
+        const lines = [
+          "db",
+          `  web : hc admin db --webui  (pgweb via ssh tunnel)`,
           `  url : postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`,
           `  user: ${dbUser}`,
           `  pass: ${dbPass}`,
           `  ssh : ssh -i ${sshKey} ${target.ssh_usr}@${target.ip}`
-        )
+        ]
         console.log(lines.join("\n"))
       }
 
