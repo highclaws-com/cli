@@ -109,12 +109,15 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
       }
 
       if (opts.webui) {
-        // pgweb listens on 127.0.0.1:5433 on the db node (db_client.yml).
         const at = `${target.ssh_usr}@${target.ip}`
-        console.log(`\n\x1b[1;32m 🚀 visit: http://127.0.0.1:5433/ \x1b[0m`)
-        console.log(`tunneling 127.0.0.1:5433 to db ${target.ip}; keep this session running, ctrl+c to stop`)
-        console.log(`$ ssh -i ${sshKey} -N -L 5433:127.0.0.1:5433 ${at}`)
-        const tc = await run("ssh", ["-i", sshKey, "-N", "-L", "5433:127.0.0.1:5433", at])
+        const forward = "15433:127.0.0.1:5433"
+        console.log(`\n\x1b[1;32m 🚀 visit: http://127.0.0.1:15433/ \x1b[0m`)
+        console.log(
+          `tunneling 127.0.0.1:15433 to db ${target.ip}; ` +
+          `keep this session running, ctrl+c to stop`
+        )
+        console.log(`$ ssh -i ${sshKey} -N -L ${forward} ${at}`)
+        const tc = await run("ssh", ["-i", sshKey, "-N", "-L", forward, at])
         if (tc !== 0) {
           throw new Error(`tunnel ended (exit ${tc})`)
         }
