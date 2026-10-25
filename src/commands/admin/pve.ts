@@ -146,6 +146,7 @@ export function registerPve(admin: Command, getCtx: () => AdminContext): void {
       if (opts.proxmox) {
         adminConfig.pve.forEach((n, i) => {
           console.log(`[${i + 1}] https://${n.ip}:${n.web_port}/ (user: ${n.ssh_usr}, pass: ${n.web_pass})`)
+          console.log(`    ssh -i ${n.ssh_key} ${n.ssh_usr}@${n.ip}`)
         })
       }
 
