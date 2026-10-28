@@ -43,7 +43,7 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
     })
 
   swarmCommand
-    .command("list")
+    .command("list-nodes")
     .description("list live swarm nodes from the first configured manager")
     .action(async () => {
       const { root, adminConfig } = getCtx()
@@ -59,7 +59,28 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
         `${docker} node ls`
       ])
       if (rc !== 0) {
-        throw new Error(`swarm list failed (exit ${rc})`)
+        throw new Error(`swarm list-nodes failed (exit ${rc})`)
+      }
+    })
+
+  swarmCommand
+    .command("list-stack")
+    .description("list swarm-1 service tasks and their nodes")
+    .action(async () => {
+      const { root, adminConfig } = getCtx()
+      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
+      if (!manager) {
+        throw new Error("no swarm node with manager=true in secrets/cli.json")
+      }
+      const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
+      const rc = await run("ssh", [
+        "-i",
+        path.join(root, manager.ssh_key),
+        `${manager.ssh_usr}@${manager.ip}`,
+        `${docker} stack ps swarm-1 --filter desired-state=running`
+      ])
+      if (rc !== 0) {
+        throw new Error(`swarm list-stack failed (exit ${rc})`)
       }
     })
 
