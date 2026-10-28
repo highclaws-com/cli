@@ -1,7 +1,7 @@
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { run, runCapture, SSH_OPTS } from "../../exec"
+import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
 
 export function registerSwarm(admin: Command, getCtx: () => AdminContext): void {
   const swarmCommand = admin
@@ -113,6 +113,30 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
       ])
       if (rc !== 0) {
         throw new Error(`swarm list-stack failed (exit ${rc})`)
+      }
+    })
+
+  swarmCommand
+    .command("print-service <service>")
+    .description("print service tasks, nodes, states, and endpoint mode")
+    .action(async (service: string) => {
+      const { root, adminConfig } = getCtx()
+      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
+      if (!manager) {
+        throw new Error("no swarm node with manager=true in secrets/cli.json")
+      }
+      const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
+      const rc = await run("ssh", [
+        ...SSH_OPTS,
+        "-i",
+        path.join(root, manager.ssh_key),
+        `${manager.ssh_usr}@${manager.ip}`,
+        `mode=$(${docker} service inspect ${escapeShell(service)} --format '{{.Endpoint.Spec.Mode}}') && ` +
+          `${docker} service ps ${escapeShell(service)} --filter desired-state=running ` +
+          `--format "table {{.Name}}\\t{{.Node}}\\t{{.DesiredState}}\\t{{.CurrentState}}\\t$mode"`
+      ])
+      if (rc !== 0) {
+        throw new Error(`swarm print-service failed (exit ${rc})`)
       }
     })
 
