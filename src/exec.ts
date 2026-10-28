@@ -5,6 +5,15 @@ export interface RunOptions {
   env?: Record<string, string>
 }
 
+export const SSH_OPTS = [
+  "-o",
+  "StrictHostKeyChecking=no",
+  "-o",
+  "UserKnownHostsFile=/dev/null",
+  "-o",
+  "LogLevel=ERROR"
+]
+
 export function run(cmd: string, args: string[], opts: RunOptions = {}): Promise<number> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {

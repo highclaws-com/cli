@@ -1,7 +1,7 @@
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { escapeShell, run } from "../../exec"
+import { escapeShell, run, SSH_OPTS } from "../../exec"
 
 export function registerWgConnect(admin: Command, getCtx: () => AdminContext): void {
   const wgConnect = admin
@@ -45,7 +45,10 @@ export function registerWgConnect(admin: Command, getCtx: () => AdminContext): v
 
       console.log(`connecting db ${db.ip} to swarm manager ${manager.ip}`)
       console.log(`$ ssh -i ${dbKey} ${db.ssh_usr}@${db.ip} -- ${remoteCommand}`)
-      const rc = await run("ssh", ["-i", dbKey, `${db.ssh_usr}@${db.ip}`, "--", remoteCommand])
+      const rc = await run("ssh", [
+        ...SSH_OPTS,
+        "-i", dbKey, `${db.ssh_usr}@${db.ip}`, "--", remoteCommand
+      ])
       if (rc !== 0) {
         throw new Error(`db-swarm WireGuard connection failed (exit ${rc})`)
       }

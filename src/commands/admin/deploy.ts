@@ -3,7 +3,7 @@ import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { run } from "../../exec"
+import { run, SSH_OPTS } from "../../exec"
 
 interface DeployOptions {
   portainer?: boolean
@@ -93,7 +93,13 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
           ${docker} stack rm swarm-1 && wait_for_stack_down swarm-1
         `
         console.log(`removing swarm-1 stack on manager ${manager.ip}`)
-        const rc = await run("ssh", ["-i", key, at, remoteCmd])
+        const rc = await run("ssh", [
+          ...SSH_OPTS,
+          "-i",
+          key,
+          at,
+          remoteCmd
+        ])
         if (rc !== 0) {
           throw new Error(`stack removal failed (exit ${rc})`)
         }
@@ -118,7 +124,14 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
           const nodeAt = `${n.ssh_usr}@${n.ip}`
           console.log(`updating checkout on swarm node ${n.ip}`)
           console.log(`$ ssh -i ${nodeKey} ${nodeAt} -- ${remoteCmd}`)
-          const rc = await run("ssh", ["-i", nodeKey, nodeAt, "--", remoteCmd])
+          const rc = await run("ssh", [
+            ...SSH_OPTS,
+            "-i",
+            nodeKey,
+            nodeAt,
+            "--",
+            remoteCmd
+          ])
           if (rc !== 0) {
             throw new Error(`checkout update failed on ${n.ip} (exit ${rc})`)
           }
@@ -134,7 +147,14 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
         const remoteCmd = `${shell} -c 'cd ${manager.src_path} && ${stackCmd}'`
         console.log(`deploying swarm-1 stack on manager ${manager.ip}`)
         console.log(`$ ssh -i ${key} ${at} -- ${remoteCmd}`)
-        const rc = await run("ssh", ["-i", key, at, "--", remoteCmd])
+        const rc = await run("ssh", [
+          ...SSH_OPTS,
+          "-i",
+          key,
+          at,
+          "--",
+          remoteCmd
+        ])
         if (rc !== 0) {
           throw new Error(`stack deploy failed (exit ${rc})`)
         }
@@ -147,14 +167,29 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
         const remoteCmd = `cd ${manager.src_path} && ${docker} compose -f portainer.yml up --detach --remove-orphans`
         console.log(`[1/2] deploying portainer on manager ${manager.ip}`)
         console.log(`$ ssh -i ${key} ${at} -- ${remoteCmd}`)
-        const rc = await run("ssh", ["-i", key, at, "--", remoteCmd])
+        const rc = await run("ssh", [
+          ...SSH_OPTS,
+          "-i",
+          key,
+          at,
+          "--",
+          remoteCmd
+        ])
         if (rc !== 0) {
           throw new Error(`deploy failed (exit ${rc})`)
         }
 
         console.log(`\n\x1b[1;32m 🚀 visit: https://127.0.0.1:9443/ \x1b[0m`)
         console.log(`[2/2] tunneling 127.0.0.1:9443 to manager ${manager.ip}; keep this session running, ctrl+c to stop`)
-        const tunnelArgs = ["-i", key, "-N", "-L", "9443:127.0.0.1:9443", at]
+        const tunnelArgs = [
+          ...SSH_OPTS,
+          "-i",
+          key,
+          "-N",
+          "-L",
+          "9443:127.0.0.1:9443",
+          at
+        ]
         console.log(`$ ssh -i ${key} -N -L 9443:127.0.0.1:9443 ${at}`)
         const tc = await run("ssh", tunnelArgs)
         if (tc !== 0) {

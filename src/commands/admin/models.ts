@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto"
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext, extractEnv } from "../../config"
-import { escapeShell, run, runCapture } from "../../exec"
+import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
 
 interface ModelsOptions {
   contextLength?: boolean
@@ -56,7 +56,10 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         const container = `$(${docker} ps -q --filter 'name=billing[^_]' | head -n 1)`
         const remote = `${docker} exec ${container} cat /app/model_pricing.json`
         const { code, stdout } = await runCapture(
-          "ssh", ["-i", sshKey, `${manager.ssh_usr}@${manager.ip}`, remote]
+          "ssh", [
+            ...SSH_OPTS,
+            "-i", sshKey, `${manager.ssh_usr}@${manager.ip}`, remote
+          ]
         )
         if (code !== 0) {
           throw new Error(`price fetch failed (exit ${code})`)
@@ -119,7 +122,10 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q` +
           ` -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
         const { code, stdout } = await runCapture(
-          "ssh", ["-i", path.join(root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote]
+          "ssh", [
+            ...SSH_OPTS,
+            "-i", path.join(root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote
+          ]
         )
         if (code !== 0) {
           throw new Error(`allowlist query failed (exit ${code})`)
@@ -162,7 +168,10 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         ]
       const remote = [...common, ...rest].join(" && ")
       console.log(`[models scan] db node ${target.ip}, remote root ${opts.remoteRoot}`)
-      const rc = await run("ssh", ["-i", key, at, remote])
+      const rc = await run("ssh", [
+        ...SSH_OPTS,
+        "-i", key, at, remote
+      ])
       if (rc !== 0) {
         throw new Error(`models scan failed (exit ${rc})`)
       }
@@ -203,7 +212,10 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t` +
         ` -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
       const { code, stdout } = await runCapture(
-        "ssh", ["-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote]
+        "ssh", [
+          ...SSH_OPTS,
+          "-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote
+        ]
       )
       if (code !== 0) {
         throw new Error(`manual key insert failed (exit ${code})`)
@@ -225,6 +237,9 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
       const sql = `UPDATE "ModelKeys" SET revoked_at = now() WHERE id = ${id};`
       const remote = `docker exec db_1-db-1 psql -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
-      await run("ssh", ["-i", path.join(root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote])
+      await run("ssh", [
+        ...SSH_OPTS,
+        "-i", path.join(root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote
+      ])
     })
 }

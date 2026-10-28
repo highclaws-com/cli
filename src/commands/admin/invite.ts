@@ -1,7 +1,7 @@
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { escapeShell, run, runCapture } from "../../exec"
+import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
 
 interface GenerateOptions {
   max_uses: string
@@ -42,7 +42,10 @@ export function registerInvite(admin: Command, getCtx: () => AdminContext): void
       const key = path.join(root, manager.ssh_key)
       const at = `${manager.ssh_usr}@${manager.ip}`
 
-      const rc = await run("ssh", ["-i", key, at, remote])
+      const rc = await run("ssh", [
+        ...SSH_OPTS,
+        "-i", key, at, remote
+      ])
       if (rc !== 0) {
         throw new Error(`invite code generation failed (exit ${rc})`)
       }
@@ -64,7 +67,10 @@ export function registerInvite(admin: Command, getCtx: () => AdminContext): void
       const key = path.join(root, manager.ssh_key)
       const at = `${manager.ssh_usr}@${manager.ip}`
 
-      const { code: rc, stdout } = await runCapture("ssh", ["-i", key, at, remote])
+      const { code: rc, stdout } = await runCapture("ssh", [
+        ...SSH_OPTS,
+        "-i", key, at, remote
+      ])
       if (rc !== 0) {
         throw new Error(`invite code validation failed (exit ${rc})`)
       }

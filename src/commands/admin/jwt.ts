@@ -4,7 +4,7 @@ import path from "node:path"
 import { spawn } from "node:child_process"
 import { Command } from "commander"
 import { AdminContext, APP_DOMAIN, APP_NAME } from "../../config"
-import { runCapture } from "../../exec"
+import { runCapture, SSH_OPTS } from "../../exec"
 
 interface JwtOptions {
   uid: string
@@ -154,7 +154,10 @@ export function registerJwt(admin: Command, getCtx: () => AdminContext): void {
       const key = path.join(root, manager.ssh_key)
       const at = `${manager.ssh_usr}@${manager.ip}`
       console.log(`Generating JWT for UID ${uid}...`)
-      const { code, stdout } = await runCapture("ssh", ["-i", key, at, remote])
+      const { code, stdout } = await runCapture("ssh", [
+        ...SSH_OPTS,
+        "-i", key, at, remote
+      ])
       if (code !== 0) {
         throw new Error(`JWT generation failed (exit ${code})`)
       }

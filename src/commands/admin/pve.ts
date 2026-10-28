@@ -3,7 +3,7 @@ import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { escapeShell, run, runCapture } from "../../exec"
+import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
 
 interface PveOptions {
   proxmox?: boolean
@@ -121,7 +121,10 @@ export function registerPve(admin: Command, getCtx: () => AdminContext): void {
           const at = `${target.ssh_usr}@${target.ip}`
           const lookupCommand = `qm list | awk -v name=${escapeShell(name)}` +
             ` '$2 == name {print $1}'`
-          const lookup = await runCapture("ssh", ["-i", key, at, lookupCommand])
+          const lookup = await runCapture("ssh", [
+            ...SSH_OPTS,
+            "-i", key, at, lookupCommand
+          ])
           if (lookup.code !== 0) throw new Error(`VM lookup failed on ${target.ip}`)
           const vmid = lookup.stdout.trim()
           if (!vmid) continue
@@ -136,7 +139,10 @@ export function registerPve(admin: Command, getCtx: () => AdminContext): void {
           const command = `set -e; if qm status ${vmid} | grep -q 'status: running';` +
             ` then qm stop ${vmid}; qm wait ${vmid}; fi;` +
             ` qm destroy ${vmid} --destroy-unreferenced-disks 1 --purge 1`
-          const rc = await run("ssh", ["-i", key, at, command])
+          const rc = await run("ssh", [
+            ...SSH_OPTS,
+            "-i", key, at, command
+          ])
           if (rc !== 0) throw new Error(`VM removal failed on ${target.ip} (exit ${rc})`)
           return
         }

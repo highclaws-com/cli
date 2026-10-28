@@ -1,7 +1,7 @@
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { run, runCapture } from "../../exec"
+import { run, runCapture, SSH_OPTS } from "../../exec"
 
 export function registerSwarm(admin: Command, getCtx: () => AdminContext): void {
   const swarmCommand = admin
@@ -35,12 +35,7 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
           `disk=$(df -h -P / | awk 'NR==2 {print $3 "/" $2 " (remain " $4 ")"}') && ` +
           `echo "$node_id | mem: $mem | disk: $disk"`
         const { code, stdout } = await runCapture("ssh", [
-          "-o",
-          "StrictHostKeyChecking=no",
-          "-o",
-          "UserKnownHostsFile=/dev/null",
-          "-o",
-          "LogLevel=ERROR",
+          ...SSH_OPTS,
           "-i",
           path.join(root, n.ssh_key),
           `${n.ssh_usr}@${n.ip}`,
@@ -64,6 +59,7 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
       }
       const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
       const rc = await run("ssh", [
+        ...SSH_OPTS,
         "-i",
         path.join(root, manager.ssh_key),
         `${manager.ssh_usr}@${manager.ip}`,
@@ -85,6 +81,7 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
       }
       const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
       const rc = await run("ssh", [
+        ...SSH_OPTS,
         "-i",
         path.join(root, manager.ssh_key),
         `${manager.ssh_usr}@${manager.ip}`,
@@ -107,6 +104,7 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
         }
         const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
         const rc = await run("ssh", [
+          ...SSH_OPTS,
           "-i",
           path.join(root, manager.ssh_key),
           `${manager.ssh_usr}@${manager.ip}`,
@@ -139,6 +137,7 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
 
         console.log(`[${node.ip}] $ ${commands.join(" && ")}`)
         const rc = await run("ssh", [
+          ...SSH_OPTS,
           "-i",
           path.join(root, node.ssh_key),
           `${node.ssh_usr}@${node.ip}`,

@@ -1,7 +1,7 @@
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext, extractEnv } from "../../config"
-import { escapeShell, run, runCapture } from "../../exec"
+import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
 
 interface DbOptions {
   blockBilling?: string
@@ -42,7 +42,12 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
         const remote = `${docker} exec ${container} node database.js` +
           ` --block-billing ${escapeShell(opts.blockBilling)}`
         const { code, stdout } = await runCapture(
-          "ssh", ["-i", path.join(root, manager.ssh_key), `${manager.ssh_usr}@${manager.ip}`, remote]
+          "ssh", [
+            ...SSH_OPTS,
+            "-i", path.join(root, manager.ssh_key),
+            `${manager.ssh_usr}@${manager.ip}`,
+            remote
+          ]
         )
         if (code !== 0) {
           throw new Error(`block-billing failed (exit ${code})`)
@@ -97,7 +102,12 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
         const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t` +
           ` -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
         const { code, stdout } = await runCapture(
-          "ssh", ["-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote]
+          "ssh", [
+            ...SSH_OPTS,
+            "-i", sshKey,
+            `${target.ssh_usr}@${target.ip}`,
+            remote
+          ]
         )
         if (code !== 0) {
           throw new Error(`row deletion failed (exit ${code})`)
@@ -117,7 +127,10 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
           `keep this session running, ctrl+c to stop`
         )
         console.log(`$ ssh -i ${sshKey} -N -L ${forward} ${at}`)
-        const tc = await run("ssh", ["-i", sshKey, "-N", "-L", forward, at])
+        const tc = await run("ssh", [
+          ...SSH_OPTS,
+          "-i", sshKey, "-N", "-L", forward, at
+        ])
         if (tc !== 0) {
           throw new Error(`tunnel ended (exit ${tc})`)
         }
@@ -144,7 +157,10 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
         const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t -P null=null -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
         console.error(`[${tag}] node_id=${nodeId} on db ${target.ip}`)
         console.error(`$ ssh -i ${sshKey} ${target.ssh_usr}@${target.ip} ${escapeShell(remote)}`)
-        const { code, stdout } = await runCapture("ssh", ["-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote])
+        const { code, stdout } = await runCapture("ssh", [
+          ...SSH_OPTS,
+          "-i", sshKey, `${target.ssh_usr}@${target.ip}`, remote
+        ])
         if (code !== 0) {
           throw new Error(`${tag} failed (exit ${code})`)
         }
