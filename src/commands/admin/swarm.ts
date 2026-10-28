@@ -32,7 +32,7 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
         "-i",
         path.join(root, manager.ssh_key),
         `${manager.ssh_usr}@${manager.ip}`,
-        `${docker} node inspect self --format '{{.ManagerStatus.Addr}}' && ` +
+        `${docker} node inspect self --format '{{.ManagerStatus.Addr}}' | tr '\\n' ' '; ` +
           `${docker} swarm join-token worker -q`
       ])
       if (rc !== 0) {
