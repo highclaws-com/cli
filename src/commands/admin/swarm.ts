@@ -1,7 +1,7 @@
 import path from "node:path"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { run } from "../../exec"
+import { run, runCapture } from "../../exec"
 
 export function registerSwarm(admin: Command, getCtx: () => AdminContext): void {
   const swarmCommand = admin
@@ -16,6 +16,51 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
       swarm.forEach((n, i) => {
         console.log(`\x1b[1;32m [${i + 1}] ssh -i ${n.ssh_key} ${n.ssh_usr}@${n.ip}${n.manager ? " (manager)" : ""} \x1b[0m`)
       })
+    })
+
+  swarmCommand
+    .command("fetch-node-id")
+    .description("fetch the NodeID of each configured swarm node over SSH")
+    .action(async () => {
+      const { root, adminConfig } = getCtx()
+      const swarm = adminConfig.swarm ?? []
+      if (swarm.length === 0) {
+        throw new Error("no 'swarm' entries in secrets/cli.json")
+      }
+      for (const n of swarm) {
+        const docker = n.ssh_usr === "root" ? "docker" : "sudo docker"
+        const { code, stdout } = await runCapture("ssh", [
+          "-i",
+          path.join(root, n.ssh_key),
+          `${n.ssh_usr}@${n.ip}`,
+          `${docker} info --format '{{.Swarm.NodeID}}'`
+        ])
+        if (code !== 0) {
+          throw new Error(`swarm node lookup failed on ${n.ip} (exit ${code})`)
+        }
+        console.log(`${n.ip} ${stdout.trim()}`)
+      }
+    })
+
+  swarmCommand
+    .command("list")
+    .description("list live swarm nodes from the first configured manager")
+    .action(async () => {
+      const { root, adminConfig } = getCtx()
+      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
+      if (!manager) {
+        throw new Error("no swarm node with manager=true in secrets/cli.json")
+      }
+      const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
+      const rc = await run("ssh", [
+        "-i",
+        path.join(root, manager.ssh_key),
+        `${manager.ssh_usr}@${manager.ip}`,
+        `${docker} node ls`
+      ])
+      if (rc !== 0) {
+        throw new Error(`swarm list failed (exit ${rc})`)
+      }
     })
 
   for (const role of ["worker", "manager"]) {
