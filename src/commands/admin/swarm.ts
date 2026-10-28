@@ -19,8 +19,8 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
     })
 
   swarmCommand
-    .command("fetch-node-id")
-    .description("fetch the NodeID of each configured swarm node over SSH")
+    .command("fetch-node-info")
+    .description("fetch the NodeID, memory, and disk usage of each configured swarm node over SSH")
     .action(async () => {
       const { root, adminConfig } = getCtx()
       const swarm = adminConfig.swarm ?? []
@@ -29,11 +29,22 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
       }
       for (const n of swarm) {
         const docker = n.ssh_usr === "root" ? "docker" : "sudo docker"
+        const remoteCmd =
+          `node_id=$(${docker} info --format '{{.Swarm.NodeID}}') && ` +
+          `mem=$(free -h | awk '/^Mem:/ {print $3 "/" $2 " (remain " $7 ")"}') && ` +
+          `disk=$(df -h -P / | awk 'NR==2 {print $3 "/" $2 " (remain " $4 ")"}') && ` +
+          `echo "$node_id | mem: $mem | disk: $disk"`
         const { code, stdout } = await runCapture("ssh", [
+          "-o",
+          "StrictHostKeyChecking=no",
+          "-o",
+          "UserKnownHostsFile=/dev/null",
+          "-o",
+          "LogLevel=ERROR",
           "-i",
           path.join(root, n.ssh_key),
           `${n.ssh_usr}@${n.ip}`,
-          `${docker} info --format '{{.Swarm.NodeID}}'`
+          remoteCmd
         ])
         if (code !== 0) {
           throw new Error(`swarm node lookup failed on ${n.ip} (exit ${code})`)
