@@ -18,27 +18,29 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
       })
     })
 
-  swarmCommand
-    .command("join-info")
-    .description("print the manager address and worker join token")
-    .action(async () => {
-      const { root, adminConfig } = getCtx()
-      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
-      if (!manager) {
-        throw new Error("no swarm node with manager=true in secrets/cli.json")
-      }
-      const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
-      const rc = await run("ssh", [
-        "-i",
-        path.join(root, manager.ssh_key),
-        `${manager.ssh_usr}@${manager.ip}`,
-        `${docker} node inspect self --format '{{.ManagerStatus.Addr}}' | tr '\\n' ' '; ` +
-          `${docker} swarm join-token worker -q`
-      ])
-      if (rc !== 0) {
-        throw new Error(`swarm join-info failed (exit ${rc})`)
-      }
-    })
+  for (const role of ["worker", "manager"]) {
+    swarmCommand
+      .command(`${role}-join-info`)
+      .description(`print the manager address and ${role} join token`)
+      .action(async () => {
+        const { root, adminConfig } = getCtx()
+        const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
+        if (!manager) {
+          throw new Error("no swarm node with manager=true in secrets/cli.json")
+        }
+        const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
+        const rc = await run("ssh", [
+          "-i",
+          path.join(root, manager.ssh_key),
+          `${manager.ssh_usr}@${manager.ip}`,
+          `${docker} node inspect self --format '{{.ManagerStatus.Addr}}' | tr '\\n' ' '; ` +
+            `${docker} swarm join-token ${role} -q`
+        ])
+        if (rc !== 0) {
+          throw new Error(`swarm ${role}-join-info failed (exit ${rc})`)
+        }
+      })
+  }
 
   const prune = swarmCommand
     .command("prune")
