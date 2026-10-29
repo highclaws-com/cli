@@ -2,6 +2,8 @@ import path from "node:path"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
 import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
+import { registerDeploy } from "./deploy"
+import { registerPve } from "./pve"
 
 export function registerSwarm(admin: Command, getCtx: () => AdminContext): void {
   const swarmCommand = admin
@@ -16,6 +18,26 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
       swarm.forEach((n, i) => {
         console.log(`\x1b[1;32m [${i + 1}] ssh -i ${n.ssh_key} ${n.ssh_usr}@${n.ip}${n.manager ? " (manager)" : ""} \x1b[0m`)
       })
+    })
+
+  swarmCommand
+    .command("post-updates")
+    .description("update firewalls, secrets, checkout, and bind-mount services for configured nodes")
+    .action(async () => {
+      const commands = [
+        ["pve", "--update-firewall"],
+        ["deploy", "--secrets"],
+        ["deploy", "--checkout"],
+        ["deploy", "--bind-mount-services"],
+        ["deploy", "--update-firewall"]
+      ]
+      for (const args of commands) {
+        console.log(`hc admin ${args.join(" ")}`)
+        const command = new Command()
+        registerPve(command, getCtx)
+        registerDeploy(command, getCtx)
+        await command.parseAsync(args, { from: "user" })
+      }
     })
 
   swarmCommand
