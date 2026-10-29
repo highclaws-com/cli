@@ -13,6 +13,7 @@ interface DeployOptions {
   secrets?: boolean
   updateFirewall?: boolean
   pveImage?: boolean
+  bindMountServices?: boolean
 }
 
 export function registerDeploy(admin: Command, getCtx: () => AdminContext): void {
@@ -26,9 +27,11 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
     .option("--update-firewall", "apply the firewall to all swarm nodes")
     .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
+    .option("--bind-mount-services", "force update swarm services that depend on host bind mounts")
     .action(async (opts: DeployOptions) => {
       if (!opts.portainer && !opts.removeStack && !opts.checkout &&
-          !opts.stack && !opts.secrets && !opts.updateFirewall && !opts.pveImage) {
+          !opts.stack && !opts.secrets && !opts.updateFirewall && !opts.pveImage &&
+          !opts.bindMountServices) {
         deploy.outputHelp()
         return
       }
@@ -252,6 +255,25 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
           if (rc !== 0) {
             throw new Error(`firewall failed for ${n.ip} (exit ${rc})`)
           }
+        }
+      }
+
+      if (opts.bindMountServices) {
+        console.log(`[bind-mount-services] restarting services on manager ${manager.ip}`)
+        const cmd = `
+          services=$(${docker} service ls -q --filter label=com.docker.stack.namespace=swarm-1) || exit $?
+          for service in $services; do
+            mounts=$(${docker} service inspect "$service" --format \
+              '{{range .Spec.TaskTemplate.ContainerSpec.Mounts}}{{if eq .Type "bind"}}bind{{end}}{{end}}') || exit $?
+            if [ -n "$mounts" ]; then
+              ${docker} service inspect "$service" --format '{{.Spec.Name}}' || exit $?
+              ${docker} service update --force "$service" || exit $?
+            fi
+          done
+        `
+        const rc = await run("ssh", [...SSH_OPTS, "-i", key, at, cmd])
+        if (rc !== 0) {
+          throw new Error(`bind-mount-services update failed (exit ${rc})`)
         }
       }
     })
