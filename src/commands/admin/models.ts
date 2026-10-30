@@ -12,6 +12,15 @@ interface ModelsOptions {
   allowlist?: boolean
 }
 
+// Request counts a model pool replica keeps in memory per credential or
+// provider key; `recent_requests` holds 20 buckets of 10 minutes, oldest first.
+interface RequestCounts {
+  success: number
+  failed: number
+  disabled?: boolean
+  recent_requests: { success: number; failed: number }[]
+}
+
 export function registerModels(admin: Command, getCtx: () => AdminContext): void {
   const models = admin
     .command("models")
@@ -229,5 +238,70 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         ...SSH_OPTS,
         "-i", path.join(root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote
       ])
+    })
+
+  models
+    .command("monitor-pool-replicas")
+    .description("show each model pool credential and provider key per replica as ok/failed counts, missing, or disabled")
+    .action(async () => {
+      // the model pool management password is derived from GATEWAY_VIEWER_KEY (config.env)
+      const [managementKey] = extractEnv(getCtx().env, ["GATEWAY_VIEWER_KEY"])
+      // The public host always reaches the same replica, so ask every replica
+      // IP from inside the gateway container, one line per answer, e.g.
+      // "10.0.2.75 auth-files {...}".
+      const header = escapeShell(`X-Management-Key: ${managementKey}`)
+      const script =
+        "for ip in $(getent hosts tasks.model_pool | cut -d' ' -f1 | sort -u); do" +
+        " for e in auth-files api-key-usage; do" +
+        ` echo "$ip $e $(curl -sSf -m 10 -H ${header} http://$ip:8317/v0/management/$e)";` +
+        " done; done"
+      const { code, stdout } = await swarmExec(getCtx(), "gateway", `sh -c ${escapeShell(script)}`)
+      if (code !== 0) {
+        throw new Error(`model pool replica query failed (exit ${code})`)
+      }
+
+      // Per credential or provider key, e.g. "command code goat user_4…rNsV"
+      // (provider keys masked), the counts each replica IP holds for it.
+      const rows: Record<string, Record<string, RequestCounts>> = {}
+      const ips = new Set<string>()
+      for (const line of stdout.trim().split("\n")) {
+        const [ip, endpoint, ...json] = line.split(" ")
+        const body = JSON.parse(json.join(" "))
+        ips.add(ip)
+        const entries: [string, RequestCounts][] = endpoint === "auth-files"
+          ? body.files.map((f: RequestCounts & { name: string }) => [f.name, f])
+          : Object.entries(body as Record<string, Record<string, RequestCounts>>).flatMap(
+            ([provider, keys]) => Object.entries(keys).map(([baseUrlAndKey, counts]) => {
+              const key = baseUrlAndKey.split("|").pop()!
+              return [`${provider} ${key.slice(0, 6)}…${key.slice(-4)}`, counts]
+            })
+          )
+        for (const [name, counts] of entries) {
+          rows[name] = { ...rows[name], [ip]: counts }
+        }
+      }
+
+      const names = Object.keys(rows).sort()
+      const width = Math.max(...names.map((n) => n.length)) + 2
+      console.log([
+        "Replica cells: ok/total upstream calls since the replica started," +
+          " or missing/disabled on that replica.",
+        "LAST 200 MIN: one character per 10 minutes over all replicas, oldest first:" +
+          " \".\" no calls, \"+\" only ok, \"x\" any failure.",
+        "",
+        "NAME".padEnd(width) + [...ips].map((ip) => ip.padEnd(12)).join("") + "LAST 200 MIN"
+      ].join("\n"))
+      for (const name of names) {
+        const cells = [...ips].map((ip) => {
+          const c = rows[name][ip]
+          return (!c ? "missing" : c.disabled ? "disabled" : `${c.success}/${c.success + c.failed}`).padEnd(12)
+        })
+        const all = Object.values(rows[name])
+        const bar = all[0].recent_requests.map((_, b) =>
+          all.some((c) => c.recent_requests[b].failed > 0) ? "x"
+            : all.some((c) => c.recent_requests[b].success > 0) ? "+" : "."
+        ).join("")
+        console.log(name.padEnd(width) + cells.join("") + bar)
+      }
     })
 }
