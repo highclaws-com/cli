@@ -242,7 +242,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
 
   models
     .command("monitor-pool-replicas")
-    .description("show each model pool credential and provider key per replica as ok/failed counts, missing, or disabled")
+    .description("show each model pool credential and provider key per replica as ok/total calls, missing, or disabled")
     .action(async () => {
       // the model pool management password is derived from GATEWAY_VIEWER_KEY (config.env)
       const [managementKey] = extractEnv(getCtx().env, ["GATEWAY_VIEWER_KEY"])
@@ -294,7 +294,10 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       for (const name of names) {
         const cells = [...ips].map((ip) => {
           const c = rows[name][ip]
-          return (!c ? "missing" : c.disabled ? "disabled" : `${c.success}/${c.success + c.failed}`).padEnd(12)
+          const cell = !c ? "missing"
+            : c.disabled ? "disabled"
+              : `${c.success}/${c.success + c.failed}`
+          return cell.padEnd(12)
         })
         const all = Object.values(rows[name])
         const bar = all[0].recent_requests.map((_, b) =>
