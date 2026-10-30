@@ -14,10 +14,12 @@ interface ModelsOptions {
 
 // Request counts a model pool replica keeps in memory per credential or
 // provider key; `recent_requests` holds 20 buckets of 10 minutes, oldest first.
+// `priority` is the selection priority (higher is tried first, unset is 0).
 interface RequestCounts {
   success: number
   failed: number
   disabled?: boolean
+  priority?: number
   recent_requests: { success: number; failed: number }[]
 }
 
@@ -242,7 +244,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
 
   models
     .command("monitor-pool-replicas")
-    .description("show each model pool credential and provider key per replica as ok/total calls, missing, or disabled")
+    .description("show each model pool credential and provider key per replica as ok/total calls and priority, missing, or disabled")
     .action(async () => {
       // the model pool management password is derived from GATEWAY_VIEWER_KEY (config.env)
       const [managementKey] = extractEnv(getCtx().env, ["GATEWAY_VIEWER_KEY"])
@@ -252,7 +254,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       const header = escapeShell(`X-Management-Key: ${managementKey}`)
       const script =
         "for ip in $(getent hosts tasks.model_pool | cut -d' ' -f1 | sort -u); do" +
-        " for e in auth-files api-key-usage; do" +
+        " for e in config auth-files api-key-usage; do" +
         ` echo "$ip $e $(curl -sSf -m 10 -H ${header} http://$ip:8317/v0/management/$e)";` +
         " done; done"
       const { code, stdout } = await swarmExec(getCtx(), "gateway", `sh -c ${escapeShell(script)}`)
@@ -264,40 +266,58 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       // (provider keys masked), the counts each replica IP holds for it.
       const rows: Record<string, Record<string, RequestCounts>> = {}
       const ips = new Set<string>()
+      // Provider priority per replica IP and lowercased provider name, read
+      // from each replica's config, e.g. priorities["10.0.2.75"]["opencode go"] = 0.
+      const priorities: Record<string, Record<string, number | undefined>> = {}
       for (const line of stdout.trim().split("\n")) {
         const [ip, endpoint, ...json] = line.split(" ")
         const body = JSON.parse(json.join(" "))
         ips.add(ip)
-        const entries: [string, RequestCounts][] = endpoint === "auth-files"
-          ? body.files.map((f: RequestCounts & { name: string }) => [f.name, f])
-          : Object.entries(body as Record<string, Record<string, RequestCounts>>).flatMap(
-            ([provider, keys]) => Object.entries(keys).map(([baseUrlAndKey, counts]) => {
-              const key = baseUrlAndKey.split("|").pop()!
-              return [`${provider} ${key.slice(0, 6)}…${key.slice(-4)}`, counts]
-            })
+        if (endpoint === "config") {
+          priorities[ip] = Object.fromEntries(
+            (body["openai-compatibility"] ?? []).map(
+              (p: { name: string; priority?: number }) => [p.name.toLowerCase(), p.priority]
+            )
           )
-        for (const [name, counts] of entries) {
-          rows[name] = { ...rows[name], [ip]: counts }
+        } else {
+          const entries: [string, RequestCounts][] = endpoint === "auth-files"
+            ? body.files.map((f: RequestCounts & { name: string }) => [f.name, f])
+            : Object.entries(body as Record<string, Record<string, RequestCounts>>).flatMap(
+              ([provider, keys]) => Object.entries(keys).map(([baseUrlAndKey, counts]) => {
+                const key = baseUrlAndKey.split("|").pop()!
+                return [
+                  `${provider} ${key.slice(0, 6)}…${key.slice(-4)}`,
+                  { ...counts, priority: priorities[ip][provider] }
+                ]
+              })
+            )
+          for (const [name, counts] of entries) {
+            rows[name] = { ...rows[name], [ip]: counts }
+          }
         }
       }
 
       const names = Object.keys(rows).sort()
       const width = Math.max(...names.map((n) => n.length)) + 2
+      // Width of the widest "[priority]", e.g. "[10]", so the counts after it align.
+      const priorityWidth = Math.max(...Object.values(rows).flatMap(
+        (perReplica) => Object.values(perReplica).map((c) => `[${c.priority ?? 0}]`.length)
+      ))
       console.log([
-        "Replica cells: ok/total upstream calls since the replica started," +
-          " or missing/disabled on that replica.",
+        "Replica cells: [priority] ok/total upstream calls since the replica started" +
+          " (higher priority is tried first), or missing/disabled on that replica.",
         "LAST 200 MIN: one character per 10 minutes over all replicas, oldest first:" +
           " \".\" no calls, \"+\" only ok, \"x\" any failure.",
         "",
-        "NAME".padEnd(width) + [...ips].map((ip) => ip.padEnd(12)).join("") + "LAST 200 MIN"
+        "NAME".padEnd(width) + [...ips].map((ip) => ip.padEnd(14)).join("") + "LAST 200 MIN"
       ].join("\n"))
       for (const name of names) {
         const cells = [...ips].map((ip) => {
           const c = rows[name][ip]
           const cell = !c ? "missing"
             : c.disabled ? "disabled"
-              : `${c.success}/${c.success + c.failed}`
-          return cell.padEnd(12)
+              : `${`[${c.priority ?? 0}]`.padEnd(priorityWidth)} ${c.success}/${c.success + c.failed}`
+          return cell.padEnd(14)
         })
         const all = Object.values(rows[name])
         const bar = all[0].recent_requests.map((_, b) =>
