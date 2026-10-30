@@ -3,6 +3,7 @@ import path from "node:path"
 import { Command } from "commander"
 import { AdminContext, extractEnv } from "../../config"
 import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
+import { swarmExec } from "../../swarm-exec"
 
 interface ModelsOptions {
   contextLength?: boolean
@@ -47,20 +48,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       }
 
       if (opts.price) {
-        const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
-        if (!manager) {
-          throw new Error("no swarm node with manager=true in secrets/cli.json")
-        }
-        const sshKey = path.join(root, manager.ssh_key)
-        const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
-        const container = `$(${docker} ps -q --filter 'name=billing[^_]' | head -n 1)`
-        const remote = `${docker} exec ${container} cat /app/model_pricing.json`
-        const { code, stdout } = await runCapture(
-          "ssh", [
-            ...SSH_OPTS,
-            "-i", sshKey, `${manager.ssh_usr}@${manager.ip}`, remote
-          ]
-        )
+        const { code, stdout } = await swarmExec(getCtx(), "billing", "cat /app/model_pricing.json")
         if (code !== 0) {
           throw new Error(`price fetch failed (exit ${code})`)
         }

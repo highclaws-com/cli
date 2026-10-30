@@ -4,7 +4,7 @@ import path from "node:path"
 import { spawn } from "node:child_process"
 import { Command } from "commander"
 import { AdminContext, APP_DOMAIN, APP_NAME } from "../../config"
-import { runCapture, SSH_OPTS } from "../../exec"
+import { swarmExec } from "../../swarm-exec"
 
 interface JwtOptions {
   uid: string
@@ -140,24 +140,11 @@ export function registerJwt(admin: Command, getCtx: () => AdminContext): void {
       if (!Number.isSafeInteger(uid) || uid <= 0) {
         throw new Error("--uid must be a positive integer")
       }
-      const { root, adminConfig } = getCtx()
-      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
-      if (!manager) {
-        throw new Error("no swarm node with manager=true in secrets/cli.json")
-      }
-
-      const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
-      const container = `$(${docker} ps -q --filter 'name=rq_api[^_]' | head -n 1)`
-      const remote =
-        `${docker} exec ${container} curl -fsS ` +
-        `http://localhost:8000/api/v1/jwt/${uid} -H 'X-User-Uid: 1'`
-      const key = path.join(root, manager.ssh_key)
-      const at = `${manager.ssh_usr}@${manager.ip}`
       console.log(`Generating JWT for UID ${uid}...`)
-      const { code, stdout } = await runCapture("ssh", [
-        ...SSH_OPTS,
-        "-i", key, at, remote
-      ])
+      const { code, stdout } = await swarmExec(
+        getCtx(), "rq_api",
+        `curl -fsS http://localhost:8000/api/v1/jwt/${uid} -H 'X-User-Uid: 1'`
+      )
       if (code !== 0) {
         throw new Error(`JWT generation failed (exit ${code})`)
       }

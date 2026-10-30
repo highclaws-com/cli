@@ -2,6 +2,7 @@ import path from "node:path"
 import { Command } from "commander"
 import { AdminContext, extractEnv } from "../../config"
 import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
+import { swarmExec } from "../../swarm-exec"
 
 interface DbOptions {
   blockBilling?: string
@@ -33,21 +34,9 @@ export function registerDb(admin: Command, getCtx: () => AdminContext): void {
       const { root, adminConfig, env } = getCtx()
 
       if (opts.blockBilling) {
-        const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
-        if (!manager) {
-          throw new Error("no swarm node with manager=true in secrets/cli.json")
-        }
-        const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
-        const container = `$(${docker} ps -q --filter 'name=_auth\\.' | head -n 1)`
-        const remote = `${docker} exec ${container} node database.js` +
-          ` --block-billing ${escapeShell(opts.blockBilling)}`
-        const { code, stdout } = await runCapture(
-          "ssh", [
-            ...SSH_OPTS,
-            "-i", path.join(root, manager.ssh_key),
-            `${manager.ssh_usr}@${manager.ip}`,
-            remote
-          ]
+        const { code, stdout } = await swarmExec(
+          getCtx(), "auth",
+          `node database.js --block-billing ${escapeShell(opts.blockBilling)}`
         )
         if (code !== 0) {
           throw new Error(`block-billing failed (exit ${code})`)

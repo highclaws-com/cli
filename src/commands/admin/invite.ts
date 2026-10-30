@@ -1,7 +1,7 @@
-import path from "node:path"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
+import { escapeShell } from "../../exec"
+import { swarmExec } from "../../swarm-exec"
 
 interface GenerateOptions {
   max_uses: string
@@ -25,30 +25,21 @@ export function registerInvite(admin: Command, getCtx: () => AdminContext): void
       "0"
     )
     .action(async (opts: GenerateOptions) => {
-      const { root, adminConfig } = getCtx()
-      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
-      if (!manager) {
-        throw new Error("no swarm node with manager=true in secrets/cli.json")
-      }
-
       const payload = JSON.stringify({
         max_uses: Number(opts.max_uses),
         expiry_hours: Number(opts.expiry_hours),
         trial_hours_addition: Number(opts.trial_hours_addition),
         model_quota_dollars_addition: Number(opts.model_quota_dollars_addition)
       })
-      const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
-      const remote = `${docker} exec $(${docker} ps -q --filter 'name=admission[^_]' | head -n 1) curl -fsS -X POST http://localhost:8000/api/v1/code/generate -H 'X-User-Uid: 1' -H 'Content-Type: application/json' -d ${escapeShell(payload)}`
-      const key = path.join(root, manager.ssh_key)
-      const at = `${manager.ssh_usr}@${manager.ip}`
-
-      const rc = await run("ssh", [
-        ...SSH_OPTS,
-        "-i", key, at, remote
-      ])
+      const { code: rc, stdout } = await swarmExec(
+        getCtx(), "admission",
+        `curl -fsS -X POST http://localhost:8000/api/v1/code/generate` +
+          ` -H 'X-User-Uid: 1' -H 'Content-Type: application/json' -d ${escapeShell(payload)}`
+      )
       if (rc !== 0) {
         throw new Error(`invite code generation failed (exit ${rc})`)
       }
+      console.log(stdout)
     })
 
   invite
@@ -56,21 +47,10 @@ export function registerInvite(admin: Command, getCtx: () => AdminContext): void
     .description("get invite code information through the swarm manager")
     .argument("<code>", "invite code")
     .action(async (code: string) => {
-      const { root, adminConfig } = getCtx()
-      const manager = (adminConfig.swarm ?? []).find((node) => node.manager)
-      if (!manager) {
-        throw new Error("no swarm node with manager=true in secrets/cli.json")
-      }
-
-      const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
-      const remote = `${docker} exec $(${docker} ps -q --filter 'name=admission[^_]' | head -n 1) curl -fsS http://localhost:8000/api/v1/code/validate/${escapeShell(code)} -H 'X-User-Uid: 1'`
-      const key = path.join(root, manager.ssh_key)
-      const at = `${manager.ssh_usr}@${manager.ip}`
-
-      const { code: rc, stdout } = await runCapture("ssh", [
-        ...SSH_OPTS,
-        "-i", key, at, remote
-      ])
+      const { code: rc, stdout } = await swarmExec(
+        getCtx(), "admission",
+        `curl -fsS http://localhost:8000/api/v1/code/validate/${escapeShell(code)} -H 'X-User-Uid: 1'`
+      )
       if (rc !== 0) {
         throw new Error(`invite code validation failed (exit ${rc})`)
       }
