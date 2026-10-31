@@ -80,15 +80,34 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
         throw new Error("no swarm node with manager=true in secrets/cli.json")
       }
       const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
-      const rc = await run("ssh", [
+      // `node ls` cannot show labels, so read the same columns plus labels
+      // from `node inspect`, one tab-separated line per node.
+      const format = [
+        "{{.ID}}",
+        "{{.Description.Hostname}}",
+        "{{.Status.State}}",
+        "{{.Spec.Availability}}",
+        "{{with .ManagerStatus}}{{if .Leader}}leader{{else}}{{.Reachability}}{{end}}{{end}}",
+        "{{.Description.Engine.EngineVersion}}",
+        "{{range $k, $v := .Spec.Labels}}{{$k}}={{$v}} {{end}}"
+      ].join("\t")
+      const { code, stdout } = await runCapture("ssh", [
         ...SSH_OPTS,
         "-i",
         path.join(root, manager.ssh_key),
         `${manager.ssh_usr}@${manager.ip}`,
-        `${docker} node ls`
+        `${docker} node inspect --format ${escapeShell(format)} $(${docker} node ls -q)`
       ])
-      if (rc !== 0) {
-        throw new Error(`swarm list-nodes failed (exit ${rc})`)
+      if (code !== 0) {
+        throw new Error(`swarm list-nodes failed (exit ${code})`)
+      }
+      const rows = [
+        ["ID", "HOSTNAME", "STATUS", "AVAILABILITY", "MANAGER STATUS", "ENGINE VERSION", "LABELS"],
+        ...stdout.split("\n").filter((line) => line).map((line) => line.split("\t"))
+      ]
+      const widths = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)) + 3)
+      for (const row of rows) {
+        console.log(row.map((cell, i) => cell.padEnd(widths[i])).join("").trimEnd())
       }
     })
 
@@ -161,6 +180,34 @@ export function registerSwarm(admin: Command, getCtx: () => AdminContext): void 
         throw new Error(`swarm print-service failed (exit ${rc})`)
       }
     })
+
+  // e.g. `label-node <node> model_oauth=1` and `unlabel-node <node> model_oauth`
+  for (const [name, flag, description] of [
+    ["label-node", "--label-add", "add a label to a node (ID or HOSTNAME from list-nodes), e.g. model_oauth=1"],
+    ["unlabel-node", "--label-rm", "remove a label from a node by its key, e.g. model_oauth"]
+  ]) {
+    swarmCommand
+      .command(`${name} <node> <label>`)
+      .description(description)
+      .action(async (node: string, label: string) => {
+        const { root, adminConfig } = getCtx()
+        const manager = (adminConfig.swarm ?? []).find((n) => n.manager)
+        if (!manager) {
+          throw new Error("no swarm node with manager=true in secrets/cli.json")
+        }
+        const docker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
+        const rc = await run("ssh", [
+          ...SSH_OPTS,
+          "-i",
+          path.join(root, manager.ssh_key),
+          `${manager.ssh_usr}@${manager.ip}`,
+          `${docker} node update ${flag} ${escapeShell(label)} ${escapeShell(node)}`
+        ])
+        if (rc !== 0) {
+          throw new Error(`swarm ${name} failed (exit ${rc})`)
+        }
+      })
+  }
 
   for (const role of ["worker", "manager"]) {
     swarmCommand
