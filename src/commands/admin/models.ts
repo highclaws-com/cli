@@ -23,6 +23,9 @@ interface RequestCounts {
   recent_requests: { success: number; failed: number }[]
 }
 
+// One provider key in a model pool config section.
+type KeyEntry = { "api-key": string; "base-url"?: string; priority?: number }
+
 export function registerModels(admin: Command, getCtx: () => AdminContext): void {
   const models = admin
     .command("models")
@@ -265,20 +268,23 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       // Per credential or provider key, e.g. "command code goat user_4…rNsV"
       // (provider keys masked), the counts each replica IP holds for it.
       const rows: Record<string, Record<string, RequestCounts>> = {}
-      const ips = new Set<string>()
-      // Provider priority per replica IP and lowercased provider name, read
-      // from each replica's config, e.g. priorities["10.0.2.75"]["opencode go"] = 0.
+      // Provider-key priority per replica IP, keyed "<provider>|<base url>|<api key>"
+      // like the api-key-usage rows, e.g. priorities["10.0.2.75"]["gemini||sk-e8F..."] = 12.
       const priorities: Record<string, Record<string, number | undefined>> = {}
       for (const line of stdout.trim().split("\n")) {
         const [ip, endpoint, ...json] = line.split(" ")
         const body = JSON.parse(json.join(" "))
-        ips.add(ip)
         if (endpoint === "config") {
-          priorities[ip] = Object.fromEntries(
-            (body["openai-compatibility"] ?? []).map(
-              (p: { name: string; priority?: number }) => [p.name.toLowerCase(), p.priority]
+          // "<provider>-api-key" lists, e.g. "gemini-api-key" -> provider "gemini",
+          // and each OpenAI-compatible group as a provider named after the group.
+          priorities[ip] = Object.fromEntries([
+            ...Object.keys(body).filter((s) => s.endsWith("-api-key")).flatMap((s) => (body[s] ?? []).map(
+              (e: KeyEntry) => [`${s.replace(/-api-key$/, "")}|${e["base-url"] ?? ""}|${e["api-key"]}`, e.priority]
+            )),
+            ...(body["openai-compatibility"] ?? []).flatMap((g: KeyEntry & { name: string; "api-key-entries": KeyEntry[] | null }) =>
+              (g["api-key-entries"] ?? []).map((e) => [`${g.name.toLowerCase()}|${g["base-url"] ?? ""}|${e["api-key"]}`, g.priority])
             )
-          )
+          ])
         } else {
           const entries: [string, RequestCounts][] = endpoint === "auth-files"
             ? body.files.map((f: RequestCounts & { name: string }) => [f.name, f])
@@ -287,7 +293,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
                 const key = baseUrlAndKey.split("|").pop()!
                 return [
                   `${provider} ${key.slice(0, 6)}…${key.slice(-4)}`,
-                  { ...counts, priority: priorities[ip][provider] }
+                  { ...counts, priority: priorities[ip][`${provider}|${baseUrlAndKey}`] }
                 ]
               })
             )
@@ -296,6 +302,8 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
           }
         }
       }
+      // Each replica answers config first, so its IP is a priorities key.
+      const ips = Object.keys(priorities)
 
       const names = Object.keys(rows).sort()
       const width = Math.max(...names.map((n) => n.length)) + 2
@@ -309,10 +317,10 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         "LAST 200 MIN: one character per 10 minutes over all replicas, oldest first:" +
           " \".\" no calls, \"+\" only ok, \"x\" any failure.",
         "",
-        "NAME".padEnd(width) + [...ips].map((ip) => ip.padEnd(14)).join("") + "LAST 200 MIN"
+        "NAME".padEnd(width) + ips.map((ip) => ip.padEnd(14)).join("") + "LAST 200 MIN"
       ].join("\n"))
       for (const name of names) {
-        const cells = [...ips].map((ip) => {
+        const cells = ips.map((ip) => {
           const c = rows[name][ip]
           const cell = !c ? "missing"
             : c.disabled ? "disabled"
