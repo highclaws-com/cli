@@ -249,90 +249,109 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
     .command("monitor-pool-replicas")
     .description("show each model pool credential and provider key per replica as ok/total calls and priority, missing, or disabled")
     .action(async () => {
+      const { env, adminConfig } = getCtx()
       // the model pool management password is derived from GATEWAY_VIEWER_KEY (config.env)
-      const [managementKey] = extractEnv(getCtx().env, ["GATEWAY_VIEWER_KEY"])
+      const [managementKey] = extractEnv(env, ["GATEWAY_VIEWER_KEY"])
+      const pools = adminConfig.model_pools
+      if (!pools?.length) {
+        throw new Error("no 'model_pools' entry in secrets/cli.json")
+      }
       // The public host always reaches the same replica, so ask every replica
-      // IP from inside the gateway container, one line per answer, e.g.
-      // "10.0.2.75 auth-files {...}".
+      // IP of every pool from inside the gateway container, one line per
+      // answer, e.g. "model_pool 10.0.2.75 auth-files {...}".
       const header = escapeShell(`X-Management-Key: ${managementKey}`)
       const script =
-        "for ip in $(getent hosts tasks.model_pool | cut -d' ' -f1 | sort -u); do" +
+        `for p in ${pools.map(escapeShell).join(" ")}; do` +
+        " for ip in $(getent hosts tasks.$p | cut -d' ' -f1 | sort -u); do" +
         " for e in config auth-files api-key-usage; do" +
-        ` echo "$ip $e $(curl -sSf -m 10 -H ${header} http://$ip:8317/v0/management/$e)";` +
-        " done; done"
+        ` echo "$p $ip $e $(curl -sSf -m 10 -H ${header} http://$ip:8317/v0/management/$e)";` +
+        " done; done; done"
       const { code, stdout } = await swarmExec(getCtx(), "gateway", `sh -c ${escapeShell(script)}`)
       if (code !== 0) {
         throw new Error(`model pool replica query failed (exit ${code})`)
       }
 
-      // Per credential or provider key, e.g. "command code goat user_4…rNsV"
-      // (provider keys masked), the counts each replica IP holds for it.
-      const rows: Record<string, Record<string, RequestCounts>> = {}
-      // Provider-key priority per replica IP, keyed "<provider>|<base url>|<api key>"
-      // like the api-key-usage rows, e.g. priorities["10.0.2.75"]["gemini||sk-e8F..."] = 12.
-      const priorities: Record<string, Record<string, number | undefined>> = {}
-      for (const line of stdout.trim().split("\n")) {
-        const [ip, endpoint, ...json] = line.split(" ")
-        const body = JSON.parse(json.join(" "))
-        if (endpoint === "config") {
-          // "<provider>-api-key" lists, e.g. "gemini-api-key" -> provider "gemini",
-          // and each OpenAI-compatible group as a provider named after the group.
-          priorities[ip] = Object.fromEntries([
-            ...Object.keys(body).filter((s) => s.endsWith("-api-key")).flatMap((s) => (body[s] ?? []).map(
-              (e: KeyEntry) => [`${s.replace(/-api-key$/, "")}|${e["base-url"] ?? ""}|${e["api-key"]}`, e.priority]
-            )),
-            ...(body["openai-compatibility"] ?? []).flatMap((g: KeyEntry & { name: string; "api-key-entries": KeyEntry[] | null }) =>
-              (g["api-key-entries"] ?? []).map((e) => [`${g.name.toLowerCase()}|${g["base-url"] ?? ""}|${e["api-key"]}`, g.priority])
-            )
-          ])
-        } else {
-          const entries: [string, RequestCounts][] = endpoint === "auth-files"
-            ? body.files.map((f: RequestCounts & { name: string }) => [f.name, f])
-            : Object.entries(body as Record<string, Record<string, RequestCounts>>).flatMap(
-              ([provider, keys]) => Object.entries(keys).map(([baseUrlAndKey, counts]) => {
-                const key = baseUrlAndKey.split("|").pop()!
-                return [
-                  `${provider} ${key.slice(0, 6)}…${key.slice(-4)}`,
-                  { ...counts, priority: priorities[ip][`${provider}|${baseUrlAndKey}`] }
-                ]
-              })
-            )
-          for (const [name, counts] of entries) {
-            rows[name] = { ...rows[name], [ip]: counts }
-          }
-        }
-      }
-      // Each replica answers config first, so its IP is a priorities key.
-      const ips = Object.keys(priorities)
-
-      const names = Object.keys(rows).sort()
-      const width = Math.max(...names.map((n) => n.length)) + 2
-      // Width of the widest "[priority]", e.g. "[10]", so the counts after it align.
-      const priorityWidth = Math.max(...Object.values(rows).flatMap(
-        (perReplica) => Object.values(perReplica).map((c) => `[${c.priority ?? 0}]`.length)
-      ))
       console.log([
-        "Replica cells: [priority] ok/total upstream calls since the replica started" +
-          " (higher priority is tried first), or missing/disabled on that replica.",
-        "LAST 200 MIN: one character per 10 minutes over all replicas, oldest first:" +
-          " \".\" no calls, \"+\" only ok, \"x\" any failure.",
-        "",
-        "NAME".padEnd(width) + ips.map((ip) => ip.padEnd(14)).join("") + "LAST 200 MIN"
+        "cell: [priority] ok/total | missing | disabled",
+        "bar: 10 min/char, oldest first; . none, + ok, x fail"
       ].join("\n"))
-      for (const name of names) {
-        const cells = ips.map((ip) => {
-          const c = rows[name][ip]
-          const cell = !c ? "missing"
-            : c.disabled ? "disabled"
-              : `${`[${c.priority ?? 0}]`.padEnd(priorityWidth)} ${c.success}/${c.success + c.failed}`
-          return cell.padEnd(14)
-        })
-        const all = Object.values(rows[name])
-        const bar = all[0].recent_requests.map((_, b) =>
-          all.some((c) => c.recent_requests[b].failed > 0) ? "x"
-            : all.some((c) => c.recent_requests[b].success > 0) ? "+" : "."
-        ).join("")
-        console.log(name.padEnd(width) + cells.join("") + bar)
+      const lines = stdout.trim().split("\n")
+      for (const pool of pools) {
+        printPool(pool, lines.filter((l) => l.startsWith(`${pool} `)).map((l) => l.slice(pool.length + 1)))
       }
     })
+}
+
+// Prints one pool's table from its answer lines, e.g. "10.0.2.75 config {...}".
+function printPool(pool: string, lines: string[]): void {
+  // Per credential or provider key, e.g. "command code goat user_4…rNsV"
+  // (provider keys masked), the counts each replica IP holds for it.
+  const rows: Record<string, Record<string, RequestCounts>> = {}
+  // Provider-key priority per replica IP, keyed "<provider>|<base url>|<api key>"
+  // like the api-key-usage rows, e.g. priorities["10.0.2.75"]["gemini||sk-e8F..."] = 12.
+  const priorities: Record<string, Record<string, number | undefined>> = {}
+  // Whether cooling is on per replica IP, e.g. cooling["10.0.2.75"] = false.
+  const cooling: Record<string, boolean> = {}
+  for (const line of lines) {
+    const [ip, endpoint, ...json] = line.split(" ")
+    const body = JSON.parse(json.join(" "))
+    if (endpoint === "config") {
+      cooling[ip] = !body["disable-cooling"]
+      // "<provider>-api-key" lists, e.g. "gemini-api-key" -> provider "gemini",
+      // and each OpenAI-compatible group as a provider named after the group.
+      priorities[ip] = Object.fromEntries([
+        ...Object.keys(body).filter((s) => s.endsWith("-api-key")).flatMap((s) => (body[s] ?? []).map(
+          (e: KeyEntry) => [`${s.replace(/-api-key$/, "")}|${e["base-url"] ?? ""}|${e["api-key"]}`, e.priority]
+        )),
+        ...(body["openai-compatibility"] ?? []).flatMap((g: KeyEntry & { name: string; "api-key-entries": KeyEntry[] | null }) =>
+          (g["api-key-entries"] ?? []).map((e) => [`${g.name.toLowerCase()}|${g["base-url"] ?? ""}|${e["api-key"]}`, g.priority])
+        )
+      ])
+    } else {
+      const entries: [string, RequestCounts][] = endpoint === "auth-files"
+        ? body.files.map((f: RequestCounts & { name: string }) => [f.name, f])
+        : Object.entries(body as Record<string, Record<string, RequestCounts>>).flatMap(
+          ([provider, keys]) => Object.entries(keys).map(([baseUrlAndKey, counts]) => {
+            const key = baseUrlAndKey.split("|").pop()!
+            return [
+              `${provider} ${key.slice(0, 6)}…${key.slice(-4)}`,
+              { ...counts, priority: priorities[ip][`${provider}|${baseUrlAndKey}`] }
+            ]
+          })
+        )
+      for (const [name, counts] of entries) {
+        rows[name] = { ...rows[name], [ip]: counts }
+      }
+    }
+  }
+  // Each replica answers config first, so its IP is a priorities key.
+  const ips = Object.keys(priorities)
+
+  const names = Object.keys(rows).sort()
+  const width = Math.max(...names.map((n) => n.length)) + 2
+  // Width of the widest "[priority]", e.g. "[10]", so the counts after it align.
+  const priorityWidth = Math.max(...Object.values(rows).flatMap(
+    (perReplica) => Object.values(perReplica).map((c) => `[${c.priority ?? 0}]`.length)
+  ))
+  console.log([
+    "",
+    `[ ${pool} ]`,
+    "NAME".padEnd(width) + ips.map((ip) => ip.padEnd(14)).join("") + "LAST 200 MIN",
+    "COOLING".padEnd(width) + ips.map((ip) => (cooling[ip] ? "on" : "off").padEnd(14)).join("")
+  ].join("\n"))
+  for (const name of names) {
+    const cells = ips.map((ip) => {
+      const c = rows[name][ip]
+      const cell = !c ? "missing"
+        : c.disabled ? "disabled"
+          : `${`[${c.priority ?? 0}]`.padEnd(priorityWidth)} ${c.success}/${c.success + c.failed}`
+      return cell.padEnd(14)
+    })
+    const all = Object.values(rows[name])
+    const bar = all[0].recent_requests.map((_, b) =>
+      all.some((c) => c.recent_requests[b].failed > 0) ? "x"
+        : all.some((c) => c.recent_requests[b].success > 0) ? "+" : "."
+    ).join("")
+    console.log(name.padEnd(width) + cells.join("") + bar)
+  }
 }

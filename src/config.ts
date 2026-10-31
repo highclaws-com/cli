@@ -36,6 +36,9 @@ export interface AdminConfig {
   pve?: SshTarget[]
   db?: SshTarget
   pve_base_image?: PveBaseImage
+  // Swarm service names (without the stack prefix) of the model pools,
+  // e.g. ["model_pool", "model_oauth_1"].
+  model_pools?: string[]
   [key: string]: unknown
 }
 
