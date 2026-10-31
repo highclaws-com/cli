@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto"
 import path from "node:path"
 import { Command } from "commander"
+import diff from "microdiff"
 import { AdminContext, extractEnv } from "../../config"
 import { escapeShell, run, runCapture, SSH_OPTS } from "../../exec"
 import { swarmExec } from "../../swarm-exec"
@@ -292,11 +293,16 @@ function printPool(pool: string, lines: string[]): void {
   const priorities: Record<string, Record<string, number | undefined>> = {}
   // Whether cooling is on per replica IP, e.g. cooling["10.0.2.75"] = false.
   const cooling: Record<string, boolean> = {}
+  // Config per replica IP without "api-keys", which billing pushes to each
+  // replica on its own schedule, e.g. configs["10.0.2.75"] = { routing: {...}, ... }.
+  const configs: Record<string, Record<string, unknown>> = {}
   for (const line of lines) {
     const [ip, endpoint, ...json] = line.split(" ")
     const body = JSON.parse(json.join(" "))
     if (endpoint === "config") {
       cooling[ip] = !body["disable-cooling"]
+      const { "api-keys": _, ...config } = body
+      configs[ip] = config
       // "<provider>-api-key" lists, e.g. "gemini-api-key" -> provider "gemini",
       // and each OpenAI-compatible group as a provider named after the group.
       priorities[ip] = Object.fromEntries([
@@ -333,9 +339,20 @@ function printPool(pool: string, lines: string[]): void {
   const priorityWidth = Math.max(...Object.values(rows).flatMap(
     (perReplica) => Object.values(perReplica).map((c) => `[${c.priority ?? 0}]`.length)
   ))
+  // Per other replica, the top-level config fields that differ from the first
+  // replica's, e.g. "10.0.2.126 vs 10.0.2.124: routing, payload".
+  const diverged = ips.slice(1).flatMap((ip) => {
+    const fields = [...new Set(diff(configs[ips[0]], configs[ip]).map((d) => d.path[0]))]
+    return fields.length > 0 ? [`${ip} vs ${ips[0]}: ${fields.join(", ")}`] : []
+  })
+  // Config state after the pool name, e.g. "config all sync" or
+  // "config diverged: 10.0.2.126 vs 10.0.2.124: routing; 10.0.2.127 vs ...".
+  const configState = diverged.length > 0
+    ? `config diverged: ${diverged.join("; ")}`
+    : "config all sync"
   console.log([
     "",
-    `[ ${pool} ]`,
+    `[ ${pool} ] ${configState}`,
     "NAME".padEnd(width) + ips.map((ip) => ip.padEnd(14)).join("") + "LAST 200 MIN",
     "COOLING".padEnd(width) + ips.map((ip) => (cooling[ip] ? "on" : "off").padEnd(14)).join("")
   ].join("\n"))
