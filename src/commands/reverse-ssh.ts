@@ -4,7 +4,7 @@ import { once } from "node:events"
 import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
-import { USER_CACHE_DIR, getUserConfig, updateUserConfig } from "../config"
+import { USER_CACHE_DIR, USER_CONFIG_PATH, getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
 
 // Reverse-forwards the sandbox's 127.0.0.1:2222 to this computer's sshd on
@@ -70,7 +70,16 @@ async function reverseSsh(options: {
     "-i", keyFile,
     "-p", port,
     `tunnel@${ip}`
-  ], { stdio: "inherit" })
+  ], { stdio: ["inherit", "inherit", "pipe"] })
+  const save = () => {
+    updateUserConfig("reverse_ssh", { endpoint, key })
+    console.error(`Saved endpoint and key to ${USER_CONFIG_PATH}`)
+  }
+  // Save once ssh logs in (OpenSSH prints this at LogLevel=VERBOSE), so a dropped tunnel still remembers.
+  child.stderr!.on("data", (chunk) => {
+    process.stderr.write(chunk)
+    if (String(chunk).includes("Authenticated to ")) save()
+  })
   let interrupted = false
   const onInterrupt = () => {
     interrupted = true
@@ -83,7 +92,7 @@ async function reverseSsh(options: {
       throw new Error(`ssh exited with code ${code}`)
     }
     // Save on normal exit or Ctrl+C; SSH errors skip saving.
-    updateUserConfig("reverse_ssh", { endpoint, key })
+    save()
   } finally {
     process.off("SIGINT", onInterrupt)
   }
