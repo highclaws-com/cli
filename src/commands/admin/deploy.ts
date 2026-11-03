@@ -4,6 +4,7 @@ import readline from "node:readline/promises"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
 import { run, SSH_OPTS } from "../../exec"
+import { swarmExec } from "../../swarm-exec"
 
 interface DeployOptions {
   portainer?: boolean
@@ -14,6 +15,7 @@ interface DeployOptions {
   updateFirewall?: boolean
   pveImage?: boolean
   bindMountServices?: boolean
+  recoverSandboxProxies?: boolean
 }
 
 export function registerDeploy(admin: Command, getCtx: () => AdminContext): void {
@@ -28,10 +30,11 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
     .option("--update-firewall", "apply the firewall to all swarm nodes")
     .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
     .option("--bind-mount-services", "force update swarm services that depend on host bind mounts")
+    .option("--recover-sandbox-proxies", "recreate sandbox gateway routes from the database, via an rq_api task")
     .action(async (opts: DeployOptions) => {
       if (!opts.portainer && !opts.removeStack && !opts.checkout &&
           !opts.stack && !opts.secrets && !opts.updateFirewall && !opts.pveImage &&
-          !opts.bindMountServices) {
+          !opts.bindMountServices && !opts.recoverSandboxProxies) {
         deploy.outputHelp()
         return
       }
@@ -160,6 +163,17 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
         ])
         if (rc !== 0) {
           throw new Error(`stack deploy failed (exit ${rc})`)
+        }
+      }
+
+      if (opts.recoverSandboxProxies) {
+        console.log("[recover-sandbox-proxies] restoring sandbox gateway routes")
+        const { code, stdout } = await swarmExec(
+          getCtx(), "rq_api", "python sandbox_proxy_restore.py"
+        )
+        console.log(stdout.trim())
+        if (code !== 0) {
+          throw new Error(`recover-sandbox-proxies failed (exit ${code})`)
         }
       }
 
