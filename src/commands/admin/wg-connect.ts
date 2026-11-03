@@ -23,17 +23,17 @@ export function registerWgConnect(admin: Command, getCtx: () => AdminContext): v
       }
 
       const managerDocker = manager.ssh_usr === "root" ? "docker" : "sudo docker"
+      const managerSsh = `ssh ${SSH_OPTS.join(" ")} -i ${manager.ssh_key}`
       const connectArgs = [
         manager.ssh_usr,
         manager.ip,
         "g-wireguard-server-1",
         "db_1-wireguard_client-1",
-        `ssh -i ${manager.ssh_key}`,
+        managerSsh,
         managerDocker
       ]
       const dbKey = path.join(root, db.ssh_key)
       const repoDir = path.basename(root)
-      const managerSsh = `ssh -i ${manager.ssh_key}`
       const remoteCommand = [
         `cd ${escapeShell(repoDir)}`,
         `./app/wg_customized/connect.sh ${connectArgs.map(escapeShell).join(" ")}`,
