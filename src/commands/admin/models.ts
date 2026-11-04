@@ -265,7 +265,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         `for p in ${pools.map(escapeShell).join(" ")}; do` +
         " for ip in $(getent hosts tasks.$p | cut -d' ' -f1 | sort -u); do" +
         " for e in config auth-files api-key-usage; do" +
-        ` echo "$p $ip $e $(curl -sSf -m 10 -H ${header} http://$ip:8317/v0/management/$e)";` +
+        ` printf '%s %s %s %s\\n' $p $ip $e "$(curl -sSf -m 10 -H ${header} http://$ip:8317/v0/management/$e)";` +
         " done; done; done"
       const { code, stdout } = await swarmExec(getCtx(), "gateway", `sh -c ${escapeShell(script)}`)
       if (code !== 0) {
