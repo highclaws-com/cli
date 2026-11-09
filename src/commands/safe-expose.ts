@@ -2,36 +2,31 @@ import fs from "node:fs"
 import { spawn } from "node:child_process"
 import { once } from "node:events"
 import path from "node:path"
-import readline from "node:readline/promises"
 import { Command } from "commander"
-import { USER_CACHE_DIR, USER_CONFIG_PATH, getUserConfig, updateUserConfig } from "../config"
+import { USER_CACHE_DIR } from "../config"
 import { run } from "../exec"
+import { ensureProxyHelper } from "../proxy-helper"
 
 // Reverse-forwards the sandbox's 127.0.0.1:2222 to this computer's sshd on
-// port 22. The key is <fingerprint>.<base64>, with base64 encoding
-// {"key": "<OpenSSH private key>", "host_key": "ssh-ed25519 ..."}.
-async function reverseSsh(options: {
-  endpoint?: string
-  key?: string
-  reset?: boolean
-}): Promise<void> {
-  if (options.reset) updateUserConfig("reverse_ssh", undefined)
-  const saved = getUserConfig("reverse_ssh")
-  let endpoint = options.endpoint ?? saved?.endpoint
-  let key = options.key ?? saved?.key
-  if (!endpoint || !key) {
-    const prompt = readline.createInterface({ input: process.stdin, output: process.stdout })
-    try {
-      if (!endpoint) endpoint = (await prompt.question("Sandbox IP:PORT: ")).trim()
-      if (!key) key = (await prompt.question("Sandbox key: ")).trim()
-    } finally {
-      prompt.close()
-    }
-  }
-
-  const [, payload] = key.split(".")
-  const decoded = JSON.parse(Buffer.from(payload, "base64").toString("utf8"))
-  const dir = path.join(USER_CACHE_DIR, "reverse-ssh")
+// port 22. The endpoint decodes to JSON with the sandbox's SSH client key
+// ("key") and host key ("host_key").
+async function safeExpose(endpoint: string): Promise<void> {
+  const helper = await ensureProxyHelper(false)
+  const helperPath = helper.split(path.sep).join("/")
+  const quotedHelper = process.platform === "win32"
+    ? `"${helperPath}"`
+    : `'${helperPath.replace(/'/g, "'\\''")}'`
+  const decoded = JSON.parse(Buffer.from(endpoint, "base64url").toString("utf8"))
+  // Re-encode transport fields so ProxyCommand receives no shell syntax or SSH keys.
+  endpoint = Buffer.from(JSON.stringify({
+    server: decoded.server,
+    destination: decoded.destination,
+    uuid: decoded.uuid,
+    pbk: decoded.pbk,
+    sid: decoded.sid,
+    sni: decoded.sni
+  })).toString("base64url")
+  const dir = path.join(USER_CACHE_DIR, "safe-expose")
   const keyFile = path.join(dir, "key")
   const knownHostsFile = path.join(dir, "known_hosts")
   fs.mkdirSync(dir, { recursive: true })
@@ -57,7 +52,6 @@ async function reverseSsh(options: {
   }
   fs.writeFileSync(knownHostsFile, `sandbox ${decoded.host_key}\n`)
 
-  const [ip, port] = endpoint.split(":")
   const child = spawn("ssh", [
     "-N",
     "-o", "BatchMode=yes",
@@ -66,19 +60,13 @@ async function reverseSsh(options: {
     "-o", "HostKeyAlias=sandbox",
     "-o", `UserKnownHostsFile="${knownHostsFile.split(path.sep).join("/")}"`,
     "-o", "StrictHostKeyChecking=yes",
+    "-o", `ProxyCommand=${quotedHelper.replace(/%/g, "%%")} ssh-tunnel ${endpoint}`,
     "-R", "127.0.0.1:2222:127.0.0.1:22",
     "-i", keyFile,
-    "-p", port,
-    `tunnel@${ip}`
+    "tunnel@sandbox"
   ], { stdio: ["inherit", "inherit", "pipe"] })
-  const save = () => {
-    updateUserConfig("reverse_ssh", { endpoint, key })
-    console.error(`Saved endpoint and key to ${USER_CONFIG_PATH}`)
-  }
-  // Save once ssh logs in (OpenSSH prints this at LogLevel=VERBOSE), so a dropped tunnel still remembers.
   child.stderr!.on("data", (chunk) => {
     process.stderr.write(chunk)
-    if (String(chunk).includes("Authenticated to ")) save()
   })
   let interrupted = false
   const onInterrupt = () => {
@@ -91,19 +79,14 @@ async function reverseSsh(options: {
     if (code !== 0 && !interrupted && signal !== "SIGINT") {
       throw new Error(`ssh exited with code ${code}`)
     }
-    // Save on normal exit or Ctrl+C; SSH errors skip saving.
-    save()
   } finally {
     process.off("SIGINT", onInterrupt)
   }
 }
 
-export function registerReverseSsh(program: Command): void {
+export function registerSafeExpose(program: Command): void {
   program
-    .command("reverse-ssh")
+    .command("safe-expose <endpoint>")
     .description("let the sandbox reach this computer's SSH server (port 22)")
-    .option("--endpoint <ip:port>", "sandbox IP and SSH tunnel port; saved")
-    .option("--key <key>", "key from `hc sandbox get-ssh-key`; saved")
-    .option("--reset", "clear saved endpoint and key")
-    .action(reverseSsh)
+    .action(safeExpose)
 }

@@ -67,7 +67,7 @@ export function registerSandbox(program: Command): void {
 
   sandbox
     .command("get-ssh-key <host>")
-    .description("print the key for `hc reverse-ssh --key`")
+    .description("print the sandbox reverse SSH key")
     .action(getSshKey)
 
   const egress = sandbox

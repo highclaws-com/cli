@@ -5,7 +5,7 @@ import { registerAuth } from "./commands/auth"
 import { registerExpose } from "./commands/expose"
 import { registerProxy } from "./commands/proxy"
 import { registerSandbox } from "./commands/sandbox"
-import { registerReverseSsh } from "./commands/reverse-ssh"
+import { registerSafeExpose } from "./commands/safe-expose"
 import { registerSync } from "./commands/sync"
 
 const program = new Command()
@@ -16,7 +16,7 @@ registerAuth(program)
 registerExpose(program)
 registerProxy(program)
 registerSandbox(program)
-registerReverseSsh(program)
+registerSafeExpose(program)
 registerSync(program)
 
 program.parseAsync(process.argv).catch((err: Error) => {

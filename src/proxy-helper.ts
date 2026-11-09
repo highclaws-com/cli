@@ -13,14 +13,14 @@ const ASSETS: Record<string, string> = {
 export async function ensureProxyHelper(upgrade: boolean): Promise<string> {
   const platform = `${process.platform}-${process.arch}`
   const asset = ASSETS[platform]
-  if (!asset) throw new Error(`browser egress proxy is not available for ${platform}`)
+  if (!asset) throw new Error(`proxy helper is not available for ${platform}`)
 
   const dir = path.join(USER_CACHE_DIR, "proxy-helper", platform)
   const executable = path.join(dir, process.platform === "win32" ? "hc-proxy.exe" : "hc-proxy")
   if (!upgrade && fs.existsSync(executable)) return executable
 
   fs.mkdirSync(dir, { recursive: true })
-  console.error(`Downloading browser egress proxy helper for ${platform}...`)
+  console.error(`Downloading proxy helper for ${platform}...`)
   const response = await fetch(
     `https://github.com/${GITHUB_ORG}/cli/releases/download/proxy-helper/${asset}`,
     { redirect: "follow" }

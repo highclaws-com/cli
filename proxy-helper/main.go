@@ -37,7 +37,7 @@ type proxyConfig struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		log.Fatal("usage: hc-proxy keygen|serve")
+		log.Fatal("usage: hc-proxy keygen|serve|ssh-tunnel <tunnel>")
 	}
 
 	var err error
@@ -45,6 +45,8 @@ func main() {
 		err = generateKeypair()
 	} else if os.Args[1] == "serve" {
 		err = serve()
+	} else if os.Args[1] == "ssh-tunnel" && len(os.Args) == 3 {
+		err = sshTunnel(os.Args[2])
 	} else {
 		err = fmt.Errorf("unknown command %q", os.Args[1])
 	}

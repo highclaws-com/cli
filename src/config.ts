@@ -73,13 +73,6 @@ export const USER_CACHE_DIR = process.platform === "win32"
       APP_NAME
     )
 
-// Saved `hc reverse-ssh` flags, e.g. endpoint "203.0.113.5:11542" and the
-// fingerprint-prefixed key from `hc sandbox get-ssh-key`.
-export interface ReverseSshConfig {
-  endpoint: string
-  key: string
-}
-
 export interface ProxyConfig {
   endpoint: string
   serverPublicKey: string
@@ -90,7 +83,6 @@ export interface ProxyConfig {
 export interface UserConfig {
   auth?: AuthConfig
   proxy?: ProxyConfig
-  reverse_ssh?: ReverseSshConfig
   sync_token?: Record<string, string>
 }
 
