@@ -6,6 +6,7 @@ import { registerExpose } from "./commands/expose"
 import { registerProxy } from "./commands/proxy"
 import { registerSandbox } from "./commands/sandbox"
 import { registerSafeExpose } from "./commands/safe-expose"
+import { registerSafeForward } from "./commands/safe-forward"
 import { registerSync } from "./commands/sync"
 
 const program = new Command()
@@ -17,6 +18,7 @@ registerExpose(program)
 registerProxy(program)
 registerSandbox(program)
 registerSafeExpose(program)
+registerSafeForward(program)
 registerSync(program)
 
 program.parseAsync(process.argv).catch((err: Error) => {

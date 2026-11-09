@@ -13,6 +13,8 @@ hc auth login
 hc auth logout
 # let the sandbox reach this computer's SSH server
 hc safe-expose <endpoint>
+# reach the sandbox's private TCP service from this computer
+hc safe-forward 1080
 # route sandbox browser egress through this computer
 hc proxy
 # expose a local TCP service through Cloudflare

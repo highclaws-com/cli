@@ -73,7 +73,8 @@ export const USER_CACHE_DIR = process.platform === "win32"
       APP_NAME
     )
 
-// Saved `hc safe-expose` endpoint, reused when the argument is omitted.
+// Saved `hc safe-expose` and `hc safe-forward` endpoint, reused when the
+// argument is omitted.
 export interface ReverseSshConfig {
   endpoint: string
 }

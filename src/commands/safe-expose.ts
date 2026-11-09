@@ -7,6 +7,19 @@ import { USER_CACHE_DIR, USER_CONFIG_PATH, getUserConfig, updateUserConfig } fro
 import { run } from "../exec"
 import { ensureProxyHelper } from "../proxy-helper"
 
+// Base64url JSON of the endpoint's transport fields, addressed to
+// `destination`: no SSH keys, e.g. destination "10.20.0.5:2022".
+export function tunnelValue(decoded: any, destination: string): string {
+  return Buffer.from(JSON.stringify({
+    server: decoded.server,
+    destination,
+    uuid: decoded.uuid,
+    pbk: decoded.pbk,
+    sid: decoded.sid,
+    sni: decoded.sni
+  })).toString("base64url")
+}
+
 // Reverse-forwards the sandbox's 127.0.0.1:2222 to this computer's sshd on
 // port 22. The endpoint decodes to JSON with the sandbox's SSH client key
 // ("key") and host key ("host_key").
@@ -24,14 +37,7 @@ async function safeExpose(
     : `'${helperPath.replace(/'/g, "'\\''")}'`
   const decoded = JSON.parse(Buffer.from(endpoint, "base64url").toString("utf8"))
   // Re-encode transport fields so ProxyCommand receives no shell syntax or SSH keys.
-  const proxyValue = Buffer.from(JSON.stringify({
-    server: decoded.server,
-    destination: decoded.destination,
-    uuid: decoded.uuid,
-    pbk: decoded.pbk,
-    sid: decoded.sid,
-    sni: decoded.sni
-  })).toString("base64url")
+  const proxyValue = tunnelValue(decoded, decoded.destination)
   const dir = path.join(USER_CACHE_DIR, "safe-expose")
   const keyFile = path.join(dir, "key")
   const knownHostsFile = path.join(dir, "known_hosts")

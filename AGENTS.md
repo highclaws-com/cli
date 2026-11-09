@@ -179,6 +179,18 @@ hc safe-expose
 
 Port 2222 inside the sandbox reaches port 22 on this computer.
 
+`hc safe-forward` goes the other way: it forwards a local port to the TCP
+service the cloud agent runs on the sandbox's private port, whatever protocol
+it speaks. `ENDPOINT` is the same value; it is saved when passed, so later
+runs need no argument. It runs in the foreground; Ctrl+C stops it.
+
+```sh
+hc safe-forward 1080 ENDPOINT
+hc safe-forward 1080
+```
+
+Clients on this computer then connect to `127.0.0.1:1080`.
+
 From inside the sandbox:
 
 ```sh
