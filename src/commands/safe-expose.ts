@@ -49,7 +49,7 @@ async function safeExpose(
         "$acl.AddAccessRule(" +
           "[System.Security.AccessControl.FileSystemAccessRule]::new(" +
           "$user, 'FullControl', 'Allow'))",
-        "Set-Acl -LiteralPath $env:SSH_KEY_FILE -AclObject $acl"
+        "[System.IO.File]::SetAccessControl($env:SSH_KEY_FILE, $acl)"
       ].join("; ")
     ], { env: { SSH_KEY_FILE: keyFile } })
     if (code !== 0) throw new Error("failed to set SSH key file permissions")
