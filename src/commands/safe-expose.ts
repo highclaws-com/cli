@@ -3,14 +3,20 @@ import { spawn } from "node:child_process"
 import { once } from "node:events"
 import path from "node:path"
 import { Command } from "commander"
-import { USER_CACHE_DIR } from "../config"
+import { USER_CACHE_DIR, USER_CONFIG_PATH, getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
 import { ensureProxyHelper } from "../proxy-helper"
 
 // Reverse-forwards the sandbox's 127.0.0.1:2222 to this computer's sshd on
 // port 22. The endpoint decodes to JSON with the sandbox's SSH client key
 // ("key") and host key ("host_key").
-async function safeExpose(endpoint: string): Promise<void> {
+async function safeExpose(
+  endpoint: string | undefined,
+  options: { reset?: boolean }
+): Promise<void> {
+  if (options.reset) updateUserConfig("reverse_ssh", undefined)
+  endpoint = endpoint ?? getUserConfig("reverse_ssh")?.endpoint
+  if (!endpoint) throw new Error("no saved endpoint; pass <endpoint> once")
   const helper = await ensureProxyHelper(false)
   const helperPath = helper.split(path.sep).join("/")
   const quotedHelper = process.platform === "win32"
@@ -18,7 +24,7 @@ async function safeExpose(endpoint: string): Promise<void> {
     : `'${helperPath.replace(/'/g, "'\\''")}'`
   const decoded = JSON.parse(Buffer.from(endpoint, "base64url").toString("utf8"))
   // Re-encode transport fields so ProxyCommand receives no shell syntax or SSH keys.
-  endpoint = Buffer.from(JSON.stringify({
+  const proxyValue = Buffer.from(JSON.stringify({
     server: decoded.server,
     destination: decoded.destination,
     uuid: decoded.uuid,
@@ -60,13 +66,19 @@ async function safeExpose(endpoint: string): Promise<void> {
     "-o", "HostKeyAlias=sandbox",
     "-o", `UserKnownHostsFile="${knownHostsFile.split(path.sep).join("/")}"`,
     "-o", "StrictHostKeyChecking=yes",
-    "-o", `ProxyCommand=${quotedHelper.replace(/%/g, "%%")} ssh-tunnel ${endpoint}`,
+    "-o", `ProxyCommand=${quotedHelper.replace(/%/g, "%%")} ssh-tunnel ${proxyValue}`,
     "-R", "127.0.0.1:2222:127.0.0.1:22",
     "-i", keyFile,
     "tunnel@sandbox"
   ], { stdio: ["inherit", "inherit", "pipe"] })
+  const save = () => {
+    updateUserConfig("reverse_ssh", { endpoint })
+    console.error(`Saved endpoint to ${USER_CONFIG_PATH}`)
+  }
+  // Save once ssh logs in (OpenSSH prints this at LogLevel=VERBOSE), so a dropped tunnel still remembers.
   child.stderr!.on("data", (chunk) => {
     process.stderr.write(chunk)
+    if (String(chunk).includes("Authenticated to ")) save()
   })
   let interrupted = false
   const onInterrupt = () => {
@@ -79,6 +91,8 @@ async function safeExpose(endpoint: string): Promise<void> {
     if (code !== 0 && !interrupted && signal !== "SIGINT") {
       throw new Error(`ssh exited with code ${code}`)
     }
+    // Save on normal exit or Ctrl+C; SSH errors skip saving.
+    save()
   } finally {
     process.off("SIGINT", onInterrupt)
   }
@@ -86,7 +100,8 @@ async function safeExpose(endpoint: string): Promise<void> {
 
 export function registerSafeExpose(program: Command): void {
   program
-    .command("safe-expose <endpoint>")
+    .command("safe-expose [endpoint]")
     .description("let the sandbox reach this computer's SSH server (port 22)")
+    .option("--reset", "clear saved endpoint")
     .action(safeExpose)
 }

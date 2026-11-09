@@ -165,6 +165,32 @@ give the entrance to the user and tell them to message it to the cloud agent so
 it can reach the exposed local service. `hc expose` runs in the foreground;
 Ctrl+C stops it.
 
+## Connect a computer
+
+`hc safe-expose` lets the sandbox reach this computer's SSH server on port 22.
+Copy `ENDPOINT` from the sandbox console; it includes the SSH keys. It is saved
+after the first successful connection, so later runs need no argument;
+`--reset` clears it. It runs in the foreground; Ctrl+C stops it.
+
+```sh
+hc safe-expose ENDPOINT
+hc safe-expose
+```
+
+Port 2222 inside the sandbox reaches port 22 on this computer.
+
+From inside the sandbox:
+
+```sh
+SSHPASS=your-password
+SSH_USER=your-user
+sshpass -e ssh \
+  -o PubkeyAuthentication=no \
+  -o StrictHostKeyChecking=accept-new \
+  -p 2222 "$SSH_USER"@localhost \
+  'pwd'
+```
+
 ## Browser egress
 
 Running `hc proxy` gives the cloud-side agent browser a SOCKS5 egress through the

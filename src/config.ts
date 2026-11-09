@@ -73,6 +73,11 @@ export const USER_CACHE_DIR = process.platform === "win32"
       APP_NAME
     )
 
+// Saved `hc safe-expose` endpoint, reused when the argument is omitted.
+export interface ReverseSshConfig {
+  endpoint: string
+}
+
 export interface ProxyConfig {
   endpoint: string
   serverPublicKey: string
@@ -83,6 +88,7 @@ export interface ProxyConfig {
 export interface UserConfig {
   auth?: AuthConfig
   proxy?: ProxyConfig
+  reverse_ssh?: ReverseSshConfig
   sync_token?: Record<string, string>
 }
 
