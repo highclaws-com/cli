@@ -15,6 +15,8 @@ hc auth logout
 hc sandbox ls
 # list saved connectors: models, free-models, ims, or vaults
 hc connector ls models
+# list the providers of a kind and the fields each one takes
+hc connector schema ims
 # save or delete a connector
 hc connector new ims --provider Discord --name my-bot --key bot_token=<token>
 hc connector rm ims <connector-id>

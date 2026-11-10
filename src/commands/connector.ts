@@ -5,6 +5,7 @@ import { apiFetch, apiJson } from "../api"
 import { OutputOptions, output, printPage, printRows } from "../output"
 
 const CONNECTORS_API = `https://${APP_DOMAIN}/connectors/api/v1`
+const CONNECTORS_SCHEMA = `https://${APP_DOMAIN}/connectors/public/schema`
 
 // Same page size as the web console.
 export const DEFAULT_PAGE_SIZE = "10"
@@ -85,6 +86,32 @@ async function rm(kind: string, id: string, options: OutputOptions): Promise<voi
   output(options, data, () => console.log(`deleted ${kind} ${id}`))
 }
 
+// "bot_token*, allowed_users": the fields with required ones starred.
+function fieldNames(fields: Record<string, any>): string {
+  return Object.entries(fields)
+    .map(([name, field]) => field.required ? `${name}*` : name)
+    .join(", ")
+}
+
+// The providers the server accepts for a kind and the fields of each.
+async function schema(kind: string, options: OutputOptions): Promise<void> {
+  const route = writableRoute(kind)
+  const data = await apiJson(`${CONNECTORS_SCHEMA}/${route}`)
+  output(options, data, () => {
+    // Only models have an auth method and fields beside the key.
+    const isModel = route === "models"
+    printRows(
+      ["PROVIDER", "LABEL", ...(isModel ? ["AUTH-METHOD", "FIELDS"] : []), "KEY-FIELDS"],
+      data.map((entry: any) => [
+        entry.provider,
+        entry.label,
+        ...(isModel ? [entry.auth_method, fieldNames(entry.fields)] : []),
+        entry.qr_login ? "(QR login)" : fieldNames(entry.key)
+      ])
+    )
+  })
+}
+
 interface ListOptions extends OutputOptions {
   limit: string
   page: string
@@ -146,9 +173,18 @@ export function registerConnector(program: Command): void {
     .action(ls)
 
   connector
+    .command("schema <kind>")
+    .description(
+      "list the providers of a kind and their fields, required ones starred " +
+        "(kind: models|ims|vaults)"
+    )
+    .option("--json", "print the API response JSON")
+    .action(schema)
+
+  connector
     .command("new <kind>")
     .description("save a connector (kind: models|ims|vaults)")
-    .requiredOption("--provider <provider>", "provider, e.g. Discord")
+    .requiredOption("--provider <provider>", "a provider from `hc connector schema <kind>`")
     .requiredOption("--name <name>", "name shown in lists")
     .option("--model <model-id>", "models only: the provider's model ID")
     .option("--upstream <value>", "models only: endpoint that replaces the provider's own")
