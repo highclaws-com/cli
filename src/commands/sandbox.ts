@@ -42,6 +42,16 @@ function sandboxHost(row: any): string | undefined {
   return proxy?.host
 }
 
+// The sandbox list row of one sandbox, which holds what only the list returns,
+// e.g. its host.
+async function findSandbox(id: string): Promise<any> {
+  const sandboxes = await apiJson(`${PROVISION_API}/provisions?show_deleted=false&limit=100`)
+  const row = sandboxes.items.find((row: any) => row.provision_id === id)
+  if (!row) throw new Error(`no such sandbox: ${id}`)
+  if (!sandboxHost(row)) throw new Error(`sandbox ${id} has no host yet`)
+  return row
+}
+
 // Wait for a background job, printing each new progress message on stderr.
 async function waitJob(jobId: string): Promise<void> {
   let progress = ""
@@ -159,12 +169,8 @@ async function usage(
       `?minutes=${options.minutes}&samples=${options.samples}`
   )
   // Disk usage is only known to the sandbox itself, which is reached by host.
-  const sandboxes = await apiJson(`${PROVISION_API}/provisions?show_deleted=false&limit=100`)
-  const row = sandboxes.items.find((row: any) => row.provision_id === id)
-  if (!row) throw new Error(`no such sandbox: ${id}`)
-  const host = sandboxHost(row)
-  if (!host) throw new Error(`sandbox ${id} has no host yet`)
-  data.disks = await apiJson(`${hostBase(host)}/mgr/api/v1/disks`)
+  const host = sandboxHost(await findSandbox(id))
+  data.disks = await apiJson(`${hostBase(host!)}/mgr/api/v1/disks`)
   output(options, data, () => {
     const diskUsed = data.disks.disks.reduce(
       (sum: number, disk: any) => sum + disk.usage_bytes, 0
@@ -268,9 +274,16 @@ async function getSyncToken(host: string): Promise<void> {
   console.log(await apiRequest(url))
 }
 
-async function getSshKey(host: string): Promise<void> {
-  const url = `${hostBase(host)}/mgr/api/v1/ssh/key`
-  console.log(await apiRequest(url))
+// Print the value that `hc safe-expose` and `hc safe-forward` take: the
+// sandbox's tunnel address and credentials as base64url JSON.
+async function getEndpoint(id: string): Promise<void> {
+  const row = await findSandbox(id)
+  if (!row.mapped_ports?.reverse_ssh) throw new Error(`sandbox ${id} has no endpoint`)
+  const keys = await apiJson(`${hostBase(sandboxHost(row)!)}/mgr/api/v1/ssh/key`)
+  console.log(Buffer.from(JSON.stringify({
+    ...row.mapped_ports.reverse_ssh,
+    ...keys.key
+  })).toString("base64url"))
 }
 
 // Browser egress WireGuard info (keys, health), or the switch status.
@@ -385,9 +398,9 @@ export function registerSandbox(program: Command): void {
     .action(getSyncToken)
 
   sandbox
-    .command("get-ssh-key <host>")
-    .description("print the sandbox reverse SSH key")
-    .action(getSshKey)
+    .command("get-endpoint <id>")
+    .description("print the endpoint for `hc safe-expose` and `hc safe-forward`")
+    .action(getEndpoint)
 
   const egress = sandbox
     .command("egress")

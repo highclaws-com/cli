@@ -81,7 +81,8 @@ server on the target first; see the Linux, macOS, and Windows sections below.
 hc safe-expose ENDPOINT
 ```
 
-`ENDPOINT` is the value shown in the sandbox console. It is saved after a
+`ENDPOINT` is the value shown in the sandbox console, also printed by
+`hc sandbox get-endpoint <id>`. It is saved after a
 successful connection. Press Ctrl+C to stop.
 
 Ask the sandbox agent to SSH to this computer.

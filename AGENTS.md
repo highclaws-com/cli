@@ -203,7 +203,8 @@ Ctrl+C stops it.
 ## Connect a computer
 
 `hc safe-expose` lets the sandbox reach this computer's SSH server on port 22.
-Copy `ENDPOINT` from the sandbox console; it includes the SSH keys. It is saved
+`ENDPOINT` is printed by `hc sandbox get-endpoint <id>` (`<id>` is the
+`provision_id` from `hc sandbox ls`); it is a secret. It is saved
 after the first successful connection, so later runs need no argument. It
 runs in the foreground; Ctrl+C stops it.
 
