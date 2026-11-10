@@ -8,8 +8,8 @@ const CONNECTORS_API = `https://${APP_DOMAIN}/connectors/api/v1`
 // Same page size as the web console.
 export const DEFAULT_PAGE_SIZE = "10"
 
-// `hc connector ls <kind>` -> the preset list route.
-const PRESET_ROUTES: Record<string, string> = {
+// `hc connector ls <kind>` -> the connector list route.
+const CONNECTOR_ROUTES: Record<string, string> = {
   models: "models",
   "free-models": "free_models",
   ims: "connectors",
@@ -22,9 +22,9 @@ interface ListOptions extends OutputOptions {
 }
 
 async function ls(kind: string, options: ListOptions): Promise<void> {
-  const route = PRESET_ROUTES[kind]
+  const route = CONNECTOR_ROUTES[kind]
   if (!route) {
-    throw new Error(`kind must be one of: ${Object.keys(PRESET_ROUTES).join(", ")}`)
+    throw new Error(`kind must be one of: ${Object.keys(CONNECTOR_ROUTES).join(", ")}`)
   }
   const limit = Number(options.limit)
   const page = Number(options.page)
@@ -46,7 +46,7 @@ async function ls(kind: string, options: ListOptions): Promise<void> {
   )
   data.items = data.items.slice(0, limit)
   output(options, data, () => {
-    // Only model presets have a model.
+    // Only model connectors have a model.
     const isModel = route === "models" || route === "free_models"
     printRows(
       ["ID", "NAME", "PROVIDER", ...(isModel ? ["MODEL"] : []), "KEY", "USED-BY"],
@@ -66,12 +66,12 @@ async function ls(kind: string, options: ListOptions): Promise<void> {
 export function registerConnector(program: Command): void {
   const connector = program
     .command("connector")
-    .description("query saved model, messaging app, and vault presets")
+    .description("query saved model, messaging app, and vault connectors")
 
   connector
     .command("ls <kind>")
-    .description(`list presets (kind: ${Object.keys(PRESET_ROUTES).join("|")})`)
-    .option("--limit <n>", "maximum number of presets to return", DEFAULT_PAGE_SIZE)
+    .description(`list connectors (kind: ${Object.keys(CONNECTOR_ROUTES).join("|")})`)
+    .option("--limit <n>", "maximum number of connectors to return", DEFAULT_PAGE_SIZE)
     .option("--page <n>", "page index", "0")
     .option("--json", "print the API response JSON")
     .action(ls)

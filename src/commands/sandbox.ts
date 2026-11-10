@@ -206,13 +206,13 @@ async function agents(id: string, options: OutputOptions): Promise<void> {
 async function bind(
   id: string,
   kind: string,
-  presetIds: string[],
+  connectorIds: string[],
   options: AgentOptions
 ): Promise<void> {
-  const rids = presetIds.map(Number)
+  const rids = connectorIds.map(Number)
   let data
   if (kind === "model") {
-    if (rids.length !== 1) throw new Error("bind model takes exactly one preset ID")
+    if (rids.length !== 1) throw new Error("bind model takes exactly one connector ID")
     // The route replaces the whole agent list, so send every agent back.
     const current = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)
     if (!current.agents.some((agent: any) => agent.id === options.agent)) {
@@ -236,7 +236,7 @@ async function bind(
   }
   await waitJob(data.reload_job_id)
   output(options, data, () => {
-    console.log(`bound ${kind} ${presetIds.join(",") || "(none)"} to ${options.agent}`)
+    console.log(`bound ${kind} ${connectorIds.join(",") || "(none)"} to ${options.agent}`)
   })
 }
 
@@ -311,7 +311,7 @@ export function registerSandbox(program: Command): void {
   sandbox
     .command("create <tier> <name>")
     .description("create a sandbox and wait until it is provisioned")
-    .option("--model <preset-id>", "model preset for the default agent")
+    .option("--model <connector-id>", "model connector for the default agent")
     .option("--timezone <tz>", "sandbox timezone, e.g. Asia/Shanghai")
     .option("--detach", "return at once; check progress with `hc sandbox job`")
     .option("--json", "print the API response JSON")
@@ -352,10 +352,10 @@ export function registerSandbox(program: Command): void {
     .action(agents)
 
   sandbox
-    .command("bind <id> <kind> [preset-ids...]")
+    .command("bind <id> <kind> [connector-ids...]")
     .description(
-      "replace an agent's presets (kind: model|ims|vaults); " +
-        "IDs are from `hc connector ls`"
+      "replace an agent's connectors (kind: model|ims|vaults); " +
+        "connector IDs are from `hc connector ls`"
     )
     .option("--agent <profile>", "agent to change", "default")
     .option("--json", "print the API response JSON")

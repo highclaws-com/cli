@@ -13,15 +13,15 @@ hc auth login
 hc auth logout
 # list sandboxes; add --json to any sandbox or connector command for JSON
 hc sandbox ls
-# list saved presets: models, free-models, ims, or vaults
+# list saved connectors: models, free-models, ims, or vaults
 hc connector ls models
-# create a sandbox whose default agent uses a model preset
-hc sandbox create sandbox_low_tier1 <name> --model <preset-id>
+# create a sandbox whose default agent uses a model connector
+hc sandbox create sandbox_low_tier1 <name> --model <connector-id>
 # or return at once and check a job later
 hc sandbox create sandbox_low_tier1 <name> --detach
 hc sandbox job <job-id>
 # replace an agent's model, messaging apps, or vaults
-hc sandbox bind <id> ims <preset-id> <preset-id>
+hc sandbox bind <id> ims <connector-id> <connector-id>
 # set an agent's persona, or the sandbox timezone
 hc sandbox persona <id> ./persona.txt
 hc sandbox timezone <id> Asia/Shanghai

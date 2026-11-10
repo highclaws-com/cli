@@ -108,7 +108,7 @@ and rsync.
 sandbox wait until the change is applied, printing progress on stderr.
 
 ```sh
-hc sandbox create <tier> <name> [--model <preset-id>] [--timezone <tz>] [--detach]
+hc sandbox create <tier> <name> [--model <connector-id>] [--timezone <tz>] [--detach]
 hc sandbox job <job-id> [--wait]
 hc sandbox rm <id> --force
 hc sandbox rename <id> <new-name>
@@ -124,13 +124,13 @@ hc sandbox timezone <id> <tz>
 `<tier>` is one of `sandbox_low_tier1`, `sandbox_medium_tier`,
 `sandbox_high_tier`. `--agent` defaults to `default`.
 
-Presets (models, messaging apps, vaults) are created by the user in the web
+Connectors (models, messaging apps, vaults) are created by the user in the web
 console; the CLI only lists and binds them:
 
 ```sh
 hc connector ls models|free-models|ims|vaults [--limit <n>] [--page <n>]
-hc sandbox bind <id> model <preset-id> [--agent <profile>]
-hc sandbox bind <id> ims|vaults [preset-id...] [--agent <profile>]
+hc sandbox bind <id> model <connector-id> [--agent <profile>]
+hc sandbox bind <id> ims|vaults [connector-id...] [--agent <profile>]
 ```
 
 `bind ims` and `bind vaults` replace the agent's current set with the given
