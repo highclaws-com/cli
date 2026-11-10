@@ -11,9 +11,10 @@ HighClaws CLI: A CLI tool for exposing your local machine to HighClaws sandboxes
 hc auth login
 # remove the saved credentials
 hc auth logout
-# show the account's plan, and what it has used and may use
+# show the account, its plan, what it has used and may use, and usage per model
 hc account plan
 hc account quota
+hc account model-usage
 # list the sizes a sandbox can be created with
 hc sandbox tiers
 # list sandboxes; add --json to any sandbox or connector command for JSON
