@@ -296,13 +296,33 @@ async function getEndpoint(id: string): Promise<void> {
   })).toString("base64url"))
 }
 
-// Show when the sandbox's files were last backed up, or start a backup now.
-// The agent cannot reach this service, so it is not done through `msg`.
+// Show when the sandbox's files were last backed up, start a backup now, or
+// list a folder of the backup. The agent cannot reach these services, so this
+// is not done through `msg`.
 async function fileBackup(
   host: string,
-  options: OutputOptions & { trigger?: boolean }
+  options: OutputOptions & { trigger?: boolean; list?: string; page: string }
 ): Promise<void> {
-  if (options.trigger) {
+  if (options.list) {
+    const page = Number(options.page)
+    // The file API counts pages from 1.
+    const data = await apiJson(
+      `${hostBase(host)}/file-api-bkup/api/files` +
+        `?dir=${encodeURIComponent(options.list)}&page=${page + 1}`
+    )
+    output(options, data, () => {
+      printRows(
+        ["TYPE", "SIZE", "MODIFIED", "PATH"],
+        data.items.map((item: any) => [
+          item.isDir ? "dir" : "file",
+          item.isDir ? undefined : item.size,
+          new Date(item.mtime).toISOString(),
+          item.path
+        ])
+      )
+      printPage(page, data.pagination.limit, data.pagination.totalItems)
+    })
+  } else if (options.trigger) {
     const data = await apiJson(`${hostBase(host)}/backup/api/v1/trigger`, "POST")
     output(options, data, () => console.log(`file backup started on ${host}`))
   } else {
@@ -496,8 +516,10 @@ export function registerSandbox(program: Command): void {
 
   sandbox
     .command("file-backup <host>")
-    .description("show when the sandbox files were last backed up")
+    .description("show when the sandbox files were last backed up, or read the backup")
     .option("--trigger", "start a backup now instead")
+    .option("--list <dir>", "list a folder of the backup instead, e.g. /")
+    .option("--page <n>", "page index for --list", "0")
     .option("--json", "print the API response JSON")
     .action(fileBackup)
 

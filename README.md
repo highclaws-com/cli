@@ -40,6 +40,8 @@ hc sandbox msg <host> "pause my daily report job"
 # show the last file backup, or start one now
 hc sandbox file-backup <host>
 hc sandbox file-backup <host> --trigger
+# list a folder of the backup
+hc sandbox file-backup <host> --list /
 # restart the sandbox agent when it stops answering
 hc sandbox restart <host>
 # let the sandbox reach this computer's SSH server
