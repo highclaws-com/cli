@@ -30,6 +30,8 @@ hc sandbox rename <id> <new-name>
 hc sandbox usage <id>
 hc sandbox agents <id>
 hc sandbox rm <id>
+# send a message to the sandbox agent and print its reply
+hc sandbox msg <host> "pause my daily report job"
 # let the sandbox reach this computer's SSH server
 hc safe-expose <endpoint>
 # reach the sandbox's private TCP service from this computer

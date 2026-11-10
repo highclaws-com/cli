@@ -136,6 +136,19 @@ hc sandbox bind <id> ims|vaults [connector-id...] [--agent <profile>]
 `bind ims` and `bind vaults` replace the agent's current set with the given
 IDs; pass no ID to remove them all.
 
+## Message the sandbox agent
+
+Anything the sandbox agent manages itself (scheduled jobs, files, its browser)
+is done by asking it. `<host>` is the HOST column from `hc sandbox ls`.
+
+```sh
+hc sandbox msg <host> "<message>" [--agent <profile>] [--conversation <key>]
+```
+
+The reply is printed as it arrives, followed by `conversation: <key>`. Each
+call starts a new conversation unless that key is passed back with
+`--conversation`. With `--json` the output is `{"conversation", "text"}`.
+
 ## Sync (WebDAV mount and rsync)
 
 Mounting needs a one-time OS-specific prerequisite (WinFsp on Windows, macFUSE

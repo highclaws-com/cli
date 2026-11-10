@@ -1,13 +1,18 @@
+import crypto from "node:crypto"
 import fs from "node:fs"
 import readline from "node:readline/promises"
 import { Command } from "commander"
 import { APP_DOMAIN } from "../config"
-import { apiJson, apiRequest, hostBase } from "../api"
+import { apiFetch, apiJson, apiRequest, hostBase } from "../api"
 import { OutputOptions, output, printPage, printRows } from "../output"
 import { DEFAULT_PAGE_SIZE } from "./connector"
 
 const PROVISION_API = `https://${APP_DOMAIN}/provision/api/v1`
 const JOB_POLL_MS = 2000
+
+// Fixed key the agent API requires in every sandbox. It is not a secret: the
+// sandbox gateway's owner check on the login is what protects the agent.
+const AGENT_API_KEY = "hermes-api-server-key"
 
 // `hc sandbox bind <id> <kind>` -> the table in the binding route.
 const BIND_TABLES: Record<string, string> = {
@@ -291,6 +296,53 @@ async function getEndpoint(id: string): Promise<void> {
   })).toString("base64url"))
 }
 
+// Send one message to an agent and print its reply as it arrives. The
+// conversation key is printed last; pass it back to continue that conversation.
+async function msg(
+  host: string,
+  message: string,
+  options: AgentOptions & { conversation?: string }
+): Promise<void> {
+  const conversation = options.conversation ?? `conv_${crypto.randomUUID()}`
+  // Agents other than the default one are served under /p/<profile>.
+  const prefix = options.agent === "default" ? "" : `/p/${options.agent}`
+  const res = await apiFetch(
+    `${hostBase(host)}/openai-endpoint${prefix}/v1/responses`,
+    "POST",
+    {
+      model: "hermes-agent",
+      stream: true,
+      store: true,
+      input: [{ role: "user", content: message }],
+      conversation
+    },
+    { Accept: "text/event-stream", Authorization: `Bearer ${AGENT_API_KEY}` }
+  )
+  let text = ""
+  let buffer = ""
+  const decoder = new TextDecoder()
+  for await (const chunk of res.body!) {
+    buffer += decoder.decode(chunk, { stream: true })
+    // Server-sent events are separated by a blank line.
+    const events = buffer.split(/\r?\n\r?\n/)
+    buffer = events.pop()!
+    for (const event of events) {
+      const type = event.match(/^event: *(.*)$/m)?.[1]
+      const data = event.match(/^data: *(.*)$/m)?.[1]
+      if (type === "response.output_text.delta") {
+        const delta = JSON.parse(data!).delta
+        text += delta
+        if (!options.json) process.stdout.write(delta)
+      } else if (type === "response.failed") {
+        throw new Error(`agent failed: ${data}`)
+      }
+    }
+  }
+  output(options, { conversation, text }, () => {
+    console.log(`\nconversation: ${conversation}`)
+  })
+}
+
 // Browser egress WireGuard info (keys, health), or the switch status.
 async function egressGet(host: string, switchStatus?: boolean): Promise<void> {
   const url = switchStatus
@@ -406,6 +458,14 @@ export function registerSandbox(program: Command): void {
     .command("get-endpoint <id>")
     .description("print the endpoint for `hc safe-expose` and `hc safe-forward`")
     .action(getEndpoint)
+
+  sandbox
+    .command("msg <host> <message>")
+    .description("send a message to an agent and print its reply")
+    .option("--agent <profile>", "agent to message", "default")
+    .option("--conversation <key>", "continue the conversation with this key")
+    .option("--json", "print the reply and conversation key as JSON")
+    .action(msg)
 
   const egress = sandbox
     .command("egress")
