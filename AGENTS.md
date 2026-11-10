@@ -169,8 +169,8 @@ Ctrl+C stops it.
 
 `hc safe-expose` lets the sandbox reach this computer's SSH server on port 22.
 Copy `ENDPOINT` from the sandbox console; it includes the SSH keys. It is saved
-after the first successful connection, so later runs need no argument;
-`--reset` clears it. It runs in the foreground; Ctrl+C stops it.
+after the first successful connection, so later runs need no argument. It
+runs in the foreground; Ctrl+C stops it.
 
 ```sh
 hc safe-expose ENDPOINT

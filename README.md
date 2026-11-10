@@ -63,7 +63,7 @@ hc safe-expose ENDPOINT
 ```
 
 `ENDPOINT` is the value shown in the sandbox console. It is saved after a
-successful connection; `--reset` clears it. Press Ctrl+C to stop.
+successful connection. Press Ctrl+C to stop.
 
 Ask the sandbox agent to SSH to this computer.
 

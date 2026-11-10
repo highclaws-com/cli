@@ -26,11 +26,7 @@ export function tunnelValue(decoded: any, port: number): string {
 // Reverse-forwards the sandbox's 127.0.0.1:2222 to this computer's sshd on
 // port 22. The endpoint decodes to JSON with the sandbox's SSH client key
 // ("key") and host key ("host_key").
-async function safeExpose(
-  endpoint: string | undefined,
-  options: { reset?: boolean }
-): Promise<void> {
-  if (options.reset) updateUserConfig("reverse_ssh", undefined)
+async function safeExpose(endpoint: string | undefined): Promise<void> {
   endpoint = endpoint ?? getUserConfig("reverse_ssh")?.endpoint
   if (!endpoint) throw new Error("no saved endpoint; pass <endpoint> once")
   const helper = await ensureProxyHelper(false)
@@ -111,6 +107,5 @@ export function registerSafeExpose(program: Command): void {
   program
     .command("safe-expose [endpoint]")
     .description("let the sandbox reach this computer's SSH server (port 22)")
-    .option("--reset", "clear saved endpoint")
     .action(safeExpose)
 }
