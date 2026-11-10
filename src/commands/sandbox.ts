@@ -87,6 +87,17 @@ async function job(jobId: string, options: OutputOptions & { wait?: boolean }): 
   })
 }
 
+// The sizes a sandbox can be created with.
+async function tiers(options: OutputOptions): Promise<void> {
+  const data = await apiJson(`https://${APP_DOMAIN}/provision/public/tiers`)
+  output(options, data, () => {
+    printRows(
+      ["TIER", "UNITS", "VCPUS", "MEMORY-GIB"],
+      data.map((tier: any) => [tier.tier, tier.units, tier.vcpus, tier.memory])
+    )
+  })
+}
+
 async function ls(
   options: OutputOptions & { limit: string; page: string; deleted?: boolean }
 ): Promise<void> {
@@ -428,8 +439,14 @@ export function registerSandbox(program: Command): void {
     .action(ls)
 
   sandbox
+    .command("tiers")
+    .description("list the sizes a sandbox can be created with")
+    .option("--json", "print the API response JSON")
+    .action(tiers)
+
+  sandbox
     .command("create <tier> <name>")
-    .description("create a sandbox and wait until it is provisioned")
+    .description("create a sandbox of a tier from `hc sandbox tiers` and wait until it is provisioned")
     .option("--model <connector-id>", "model connector for the default agent")
     .option("--timezone <tz>", "sandbox timezone, e.g. Asia/Shanghai")
     .option("--detach", "return at once; check progress with `hc sandbox job`")

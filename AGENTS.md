@@ -121,8 +121,10 @@ hc sandbox timezone <id> <tz>
 `create --detach` returns at once with the job IDs to pass to `hc sandbox job`.
 `rm` asks for confirmation unless `--force` is given.
 
-`<tier>` is one of `sandbox_low_tier1`, `sandbox_medium_tier`,
-`sandbox_high_tier`. `--agent` defaults to `default`.
+`<tier>` is a TIER from `hc sandbox tiers`, which also shows the units each
+one costs. Before creating, check `hc account quota`: the tier's units must fit
+in what is left of "sandbox units". `hc account plan` shows the current plan.
+`--agent` defaults to `default`.
 
 Connectors (models, messaging apps, vaults) are saved once and then bound to
 sandboxes:

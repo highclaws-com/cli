@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander"
+import { registerAccount } from "./commands/account"
 import { registerAdmin } from "./commands/admin"
 import { registerAuth } from "./commands/auth"
 import { registerConnector } from "./commands/connector"
@@ -13,6 +14,7 @@ import { registerSync } from "./commands/sync"
 const program = new Command()
 program.name("hc")
 
+registerAccount(program)
 registerAdmin(program)
 registerAuth(program)
 registerConnector(program)

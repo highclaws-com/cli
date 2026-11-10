@@ -11,6 +11,11 @@ HighClaws CLI: A CLI tool for exposing your local machine to HighClaws sandboxes
 hc auth login
 # remove the saved credentials
 hc auth logout
+# show the account's plan, and what it has used and may use
+hc account plan
+hc account quota
+# list the sizes a sandbox can be created with
+hc sandbox tiers
 # list sandboxes; add --json to any sandbox or connector command for JSON
 hc sandbox ls
 # list saved connectors: models, free-models, ims, or vaults
@@ -21,9 +26,9 @@ hc connector schema ims
 hc connector new ims --provider Discord --name my-bot --key bot_token=<token>
 hc connector rm ims <connector-id>
 # create a sandbox whose default agent uses a model connector
-hc sandbox create sandbox_low_tier1 <name> --model <connector-id>
+hc sandbox create <tier> <name> --model <connector-id>
 # or return at once and check a job later
-hc sandbox create sandbox_low_tier1 <name> --detach
+hc sandbox create <tier> <name> --detach
 hc sandbox job <job-id>
 # replace an agent's model, messaging apps, or vaults
 hc sandbox bind <id> ims <connector-id> <connector-id>
