@@ -73,7 +73,7 @@ Credentials are saved locally, so every later command works without the user.
 List the user's sandboxes:
 
 ```sh
-hc sandbox ls --json [--limit <n>] [--page <n>]     # defaults: limit 10, page 0
+hc sandbox ls --json [--limit <n>] [--page <n>]     # defaults: limit 10, page 1
 ```
 
 Output is the provision API JSON. The fields needed downstream:

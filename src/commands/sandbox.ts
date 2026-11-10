@@ -92,9 +92,10 @@ async function ls(
 ): Promise<void> {
   const limit = Number(options.limit)
   const page = Number(options.page)
+  // The provision API counts pages from 0.
   const data = await apiJson(
     `${PROVISION_API}/provisions` +
-      `?show_deleted=${options.deleted ? "true" : "false"}&limit=${limit}&page=${page}`
+      `?show_deleted=${options.deleted ? "true" : "false"}&limit=${limit}&page=${page - 1}`
   )
   output(options, data, () => {
     printRows(
@@ -305,10 +306,9 @@ async function fileBackup(
 ): Promise<void> {
   if (options.list) {
     const page = Number(options.page)
-    // The file API counts pages from 1.
     const data = await apiJson(
       `${hostBase(host)}/file-api-bkup/api/files` +
-        `?dir=${encodeURIComponent(options.list)}&page=${page + 1}`
+        `?dir=${encodeURIComponent(options.list)}&page=${page}`
     )
     output(options, data, () => {
       printRows(
@@ -420,7 +420,7 @@ export function registerSandbox(program: Command): void {
     .command("ls")
     .description("list sandboxes")
     .option("--limit <n>", "maximum number of sandboxes to return", DEFAULT_PAGE_SIZE)
-    .option("--page <n>", "page index", "0")
+    .option("--page <n>", "page number, from 1", "1")
     .option("--deleted", "include deleted sandboxes")
     .option("--json", "print the API response JSON")
     .action(ls)
@@ -519,7 +519,7 @@ export function registerSandbox(program: Command): void {
     .description("show when the sandbox files were last backed up, or read the backup")
     .option("--trigger", "start a backup now instead")
     .option("--list <dir>", "list a folder of the backup instead, e.g. /")
-    .option("--page <n>", "page index for --list", "0")
+    .option("--page <n>", "page number for --list, from 1", "1")
     .option("--json", "print the API response JSON")
     .action(fileBackup)
 

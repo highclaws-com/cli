@@ -23,7 +23,8 @@ export function output(options: OutputOptions, data: unknown, readable: () => vo
 }
 
 // Page position of a paginated list, on stderr so that rows stay pipeable.
+// Pages count from 1, as `--page` does.
 export function printPage(page: number, limit: number, total: number): void {
   const pages = Math.max(1, Math.ceil(total / limit))
-  console.error(`page ${page + 1}/${pages}, ${total} total`)
+  console.error(`page ${page}/${pages}, ${total} total`)
 }

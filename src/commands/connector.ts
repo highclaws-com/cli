@@ -129,7 +129,7 @@ async function ls(kind: string, options: ListOptions): Promise<void> {
   const data = { items: [] as any[], total_records: 0 }
   let chunk
   do {
-    const offset = page * limit + data.items.length
+    const offset = (page - 1) * limit + data.items.length
     chunk = await apiJson(
       `${CONNECTORS_API}/${route}?limit=${limit - data.items.length}&offset=${offset}`
     )
@@ -138,7 +138,7 @@ async function ls(kind: string, options: ListOptions): Promise<void> {
   } while (
     chunk.items.length > 0 &&
     data.items.length < limit &&
-    page * limit + data.items.length < data.total_records
+    (page - 1) * limit + data.items.length < data.total_records
   )
   data.items = data.items.slice(0, limit)
   output(options, data, () => {
@@ -168,7 +168,7 @@ export function registerConnector(program: Command): void {
     .command("ls <kind>")
     .description(`list connectors (kind: ${Object.keys(CONNECTOR_ROUTES).join("|")})`)
     .option("--limit <n>", "maximum number of connectors to return", DEFAULT_PAGE_SIZE)
-    .option("--page <n>", "page index", "0")
+    .option("--page <n>", "page number, from 1", "1")
     .option("--json", "print the API response JSON")
     .action(ls)
 
