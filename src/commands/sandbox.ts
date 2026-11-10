@@ -278,7 +278,12 @@ async function getSyncToken(host: string): Promise<void> {
 // sandbox's tunnel address and credentials as base64url JSON.
 async function getEndpoint(id: string): Promise<void> {
   const row = await findSandbox(id)
-  if (!row.mapped_ports?.reverse_ssh) throw new Error(`sandbox ${id} has no endpoint`)
+  // Tunnel data is an object, e.g. {server, destination, uuid, ...}.
+  if (typeof row.mapped_ports?.reverse_ssh !== "object" || !row.mapped_ports.reverse_ssh) {
+    throw new Error(
+      `sandbox ${id} has no endpoint; only sandboxes created with the tunnel have one`
+    )
+  }
   const keys = await apiJson(`${hostBase(sandboxHost(row)!)}/mgr/api/v1/ssh/key`)
   console.log(Buffer.from(JSON.stringify({
     ...row.mapped_ports.reverse_ssh,
