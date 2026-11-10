@@ -3,7 +3,7 @@ import path from "node:path"
 import readline from "node:readline/promises"
 import { Command } from "commander"
 import { AdminContext } from "../../config"
-import { run, SSH_OPTS } from "../../exec"
+import { escapeShell, run, SSH_OPTS } from "../../exec"
 import { swarmExec } from "../../swarm-exec"
 
 interface DeployOptions {
@@ -11,6 +11,7 @@ interface DeployOptions {
   removeStack?: boolean
   checkout?: boolean
   stack?: boolean
+  service?: string
   secrets?: boolean
   updateFirewall?: boolean
   pveImage?: boolean
@@ -26,6 +27,7 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
     .option("--remove-stack", "remove the swarm-1 stack and wait for its services")
     .option("--checkout", "update the checkout on every swarm node without deploying services")
     .option("--stack", "update the checkout on every swarm node, then deploy the swarm-1 stack on the manager")
+    .option("--service <name>", "force update one swarm-1 service by its compose name, e.g. model_pool")
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
     .option("--update-firewall", "apply the firewall to all swarm nodes")
     .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
@@ -34,7 +36,7 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
     .action(async (opts: DeployOptions) => {
       if (!opts.portainer && !opts.removeStack && !opts.checkout &&
           !opts.stack && !opts.secrets && !opts.updateFirewall && !opts.pveImage &&
-          !opts.bindMountServices && !opts.recoverSandboxProxies) {
+          !opts.bindMountServices && !opts.recoverSandboxProxies && !opts.service) {
         deploy.outputHelp()
         return
       }
@@ -163,6 +165,15 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
         ])
         if (rc !== 0) {
           throw new Error(`stack deploy failed (exit ${rc})`)
+        }
+      }
+
+      if (opts.service) {
+        console.log(`[service] force updating swarm-1_${opts.service} on manager ${manager.ip}`)
+        const cmd = `${docker} service update --force ${escapeShell(`swarm-1_${opts.service}`)}`
+        const rc = await run("ssh", [...SSH_OPTS, "-i", key, at, cmd])
+        if (rc !== 0) {
+          throw new Error(`service update failed for ${opts.service} (exit ${rc})`)
         }
       }
 
