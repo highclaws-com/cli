@@ -4,7 +4,7 @@ import readline from "node:readline/promises"
 import { Command } from "commander"
 import { APP_DOMAIN } from "../config"
 import { apiFetch, apiJson, apiRequest, hostBase } from "../api"
-import { OutputOptions, output, printPage, printRows } from "../output"
+import { OutputOptions, checkPage, output, pageNumber, printPage, printRows } from "../output"
 import { DEFAULT_PAGE_SIZE } from "./connector"
 
 const PROVISION_API = `https://${APP_DOMAIN}/provision/api/v1`
@@ -91,12 +91,13 @@ async function ls(
   options: OutputOptions & { limit: string; page: string; deleted?: boolean }
 ): Promise<void> {
   const limit = Number(options.limit)
-  const page = Number(options.page)
+  const page = pageNumber(options.page)
   // The provision API counts pages from 0.
   const data = await apiJson(
     `${PROVISION_API}/provisions` +
       `?show_deleted=${options.deleted ? "true" : "false"}&limit=${limit}&page=${page - 1}`
   )
+  checkPage(page, limit, data.total_records)
   output(options, data, () => {
     printRows(
       ["ID", "NAME", "STATUS", "UNITS", "HOST", "CREATED"],
@@ -305,11 +306,12 @@ async function fileBackup(
   options: OutputOptions & { trigger?: boolean; list?: string; page: string }
 ): Promise<void> {
   if (options.list) {
-    const page = Number(options.page)
+    const page = pageNumber(options.page)
     const data = await apiJson(
       `${hostBase(host)}/file-api-bkup/api/files` +
         `?dir=${encodeURIComponent(options.list)}&page=${page}`
     )
+    checkPage(page, data.pagination.limit, data.pagination.totalItems)
     output(options, data, () => {
       printRows(
         ["TYPE", "SIZE", "MODIFIED", "PATH"],

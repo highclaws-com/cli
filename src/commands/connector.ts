@@ -2,7 +2,7 @@ import fs from "node:fs"
 import { Command } from "commander"
 import { APP_DOMAIN } from "../config"
 import { apiFetch, apiJson } from "../api"
-import { OutputOptions, output, printPage, printRows } from "../output"
+import { OutputOptions, checkPage, output, pageNumber, printPage, printRows } from "../output"
 
 const CONNECTORS_API = `https://${APP_DOMAIN}/connectors/api/v1`
 const CONNECTORS_SCHEMA = `https://${APP_DOMAIN}/connectors/public/schema`
@@ -123,7 +123,7 @@ async function ls(kind: string, options: ListOptions): Promise<void> {
     throw new Error(`kind must be one of: ${Object.keys(CONNECTOR_ROUTES).join(", ")}`)
   }
   const limit = Number(options.limit)
-  const page = Number(options.page)
+  const page = pageNumber(options.page)
   // A route may return fewer rows than asked, e.g. free models come 5 at a
   // time, so keep asking until the page is full or the list ends.
   const data = { items: [] as any[], total_records: 0 }
@@ -141,6 +141,7 @@ async function ls(kind: string, options: ListOptions): Promise<void> {
     (page - 1) * limit + data.items.length < data.total_records
   )
   data.items = data.items.slice(0, limit)
+  checkPage(page, limit, data.total_records)
   output(options, data, () => {
     // Only model connectors have a model.
     const isModel = route === "models" || route === "free_models"
