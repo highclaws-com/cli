@@ -49,7 +49,7 @@ interface NewOptions extends OutputOptions {
   name: string
   model?: string
   upstream?: string
-  authMethod?: string
+  authMethod: string
   key: string[]
   keyFile?: string
   qr?: string
@@ -152,7 +152,7 @@ export function registerConnector(program: Command): void {
     .requiredOption("--name <name>", "name shown in lists")
     .option("--model <model-id>", "models only: the provider's model ID")
     .option("--upstream <value>", "models only: endpoint that replaces the provider's own")
-    .option("--auth-method <method>", "how the key authenticates, when not a plain token")
+    .option("--auth-method <method>", "token or oauth_codex", "token")
     .option(
       "--key <field=value>",
       "one credential field; repeat for more",
