@@ -32,6 +32,8 @@ hc sandbox agents <id>
 hc sandbox rm <id>
 # send a message to the sandbox agent and print its reply
 hc sandbox msg <host> "pause my daily report job"
+# restart the sandbox agent when it stops answering
+hc sandbox restart <host>
 # let the sandbox reach this computer's SSH server
 hc safe-expose <endpoint>
 # reach the sandbox's private TCP service from this computer
@@ -227,7 +229,8 @@ A subcommand is added only when the agent cannot do the job:
 - it runs on this computer: `safe-expose`, `safe-forward`, `proxy`, `expose`,
   `sync`, and the values they need from the sandbox;
 - it acts on the platform, outside any sandbox: creating, deleting, and
-  configuring sandboxes, and listing connectors.
+  configuring sandboxes, and listing connectors;
+- it must work when the agent does not answer: `hc sandbox restart`.
 
 ## Development
 

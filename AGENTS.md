@@ -149,6 +149,12 @@ The reply is printed as it arrives, followed by `conversation: <key>`. Each
 call starts a new conversation unless that key is passed back with
 `--conversation`. With `--json` the output is `{"conversation", "text"}`.
 
+If the agent does not answer, restart it, then send the message again:
+
+```sh
+hc sandbox restart <host>
+```
+
 ## Sync (WebDAV mount and rsync)
 
 Mounting needs a one-time OS-specific prerequisite (WinFsp on Windows, macFUSE

@@ -296,6 +296,13 @@ async function getEndpoint(id: string): Promise<void> {
   })).toString("base64url"))
 }
 
+// Restart the agent's container without going through the agent, so that it
+// also works when the agent is stuck.
+async function restart(host: string, options: OutputOptions): Promise<void> {
+  const data = await apiJson(`${hostBase(host)}/mgr/api/v1/restart`, "POST")
+  output(options, data, () => console.log(`restarted the agent of ${host}`))
+}
+
 // Send one message to an agent and print its reply as it arrives. The
 // conversation key is printed last; pass it back to continue that conversation.
 async function msg(
@@ -466,6 +473,12 @@ export function registerSandbox(program: Command): void {
     .option("--conversation <key>", "continue the conversation with this key")
     .option("--json", "print the reply and conversation key as JSON")
     .action(msg)
+
+  sandbox
+    .command("restart <host>")
+    .description("restart the sandbox agent, e.g. when it stops answering")
+    .option("--json", "print the API response JSON")
+    .action(restart)
 
   const egress = sandbox
     .command("egress")
