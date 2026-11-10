@@ -46,13 +46,15 @@ async function ls(kind: string, options: ListOptions): Promise<void> {
   )
   data.items = data.items.slice(0, limit)
   output(options, data, () => {
+    // Only model presets have a model.
+    const isModel = route === "models" || route === "free_models"
     printRows(
-      ["ID", "NAME", "PROVIDER", "MODEL", "KEY", "USED-BY"],
+      ["ID", "NAME", "PROVIDER", ...(isModel ? ["MODEL"] : []), "KEY", "USED-BY"],
       data.items.map((item) => [
         item.id,
         item.name,
         item.provider,
-        item.model_id,
+        ...(isModel ? [item.model_id] : []),
         item.redacted_token,
         item.used_by_total
       ])
