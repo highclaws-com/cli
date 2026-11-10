@@ -18,7 +18,7 @@ hc account model-usage
 # redeem an invite code
 hc account redeem <code>
 # list the sizes a sandbox can be created with
-hc sandbox tiers
+hc sandbox ls-tiers
 # list sandboxes; add --json to any sandbox or connector command for JSON
 hc sandbox ls
 # list saved connectors: models, free-models, ims, or vaults
@@ -31,8 +31,8 @@ hc connector rm ims <connector-id>
 # create a sandbox whose default agent uses a model connector
 hc sandbox create <tier> <name> --model <connector-id>
 # recover the files of a deleted sandbox into a new one, or delete them for good
-hc sandbox recoverable
-hc sandbox recoverable-rm <id>
+hc sandbox ls-recoverable
+hc sandbox rm-recoverable <id>
 hc sandbox create <tier> <name> --recover <id> --restore-agents
 # or return at once and check a job later
 hc sandbox create <tier> <name> --detach
@@ -50,7 +50,7 @@ hc sandbox timezone <id> Asia/Shanghai
 # rename, show usage, list agents, or delete
 hc sandbox rename <id> <new-name>
 hc sandbox usage <id>
-hc sandbox agents <id>
+hc sandbox ls-agents <id>
 hc sandbox rm <id>
 # send a message to the sandbox agent and print its reply
 hc sandbox msg <host> "pause my daily report job"
@@ -269,7 +269,7 @@ A subcommand is added only when the agent cannot do the job:
   ID and sandbox routes live on the sandbox's host, so some commands take
   `<id>` and others `<host>`. Do not add a lookup to hide that.
 - The CLI keeps no copy of what the server knows. Providers and their fields
-  come from `hc connector schema`, sizes from `hc sandbox tiers`; `connector
+  come from `hc connector schema`, sizes from `hc sandbox ls-tiers`; `connector
   new` sends fields as given and the server names what is wrong.
 - `hc sandbox msg` saves nothing. It prints the conversation key, and the
   caller passes it back to continue.

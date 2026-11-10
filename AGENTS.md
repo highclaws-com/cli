@@ -109,14 +109,14 @@ sandbox wait until the change is applied, printing progress on stderr.
 
 ```sh
 hc sandbox create <tier> <name> [--model <connector-id>] [--timezone <tz>] [--detach]
-hc sandbox recoverable
-hc sandbox recoverable-rm <id> --force
+hc sandbox ls-recoverable
+hc sandbox rm-recoverable <id> --force
 hc sandbox create <tier> <name> --recover <id> [--restore-agents] [--restore-browser]
 hc sandbox job <job-id> [--wait]
 hc sandbox rm <id> --force
 hc sandbox rename <id> <new-name>
 hc sandbox usage <id>
-hc sandbox agents <id>
+hc sandbox ls-agents <id>
 hc sandbox persona <id> <file> [--agent <profile>]
 hc sandbox timezone <id> <tz>
 ```
@@ -124,11 +124,11 @@ hc sandbox timezone <id> <tz>
 `create --detach` returns at once with the job IDs to pass to `hc sandbox job`.
 `rm` asks for confirmation unless `--force` is given.
 
-`recoverable` lists deleted sandboxes whose files were kept; `create --recover`
+`ls-recoverable` lists deleted sandboxes whose files were kept; `create --recover`
 attaches one's files to the new sandbox, and the two restore options also
 bring back its agents or browser backup when the list shows one.
 
-`<tier>` is a TIER from `hc sandbox tiers`, which also shows the units each
+`<tier>` is a TIER from `hc sandbox ls-tiers`, which also shows the units each
 one costs. Before creating, check `hc account quota`: the tier's units must fit
 in what is left of "compute units". `hc account plan` shows the account's email and join date, the current plan,
 and any credit toward future subscriptions, and `hc account model-usage` the tokens used per model in this billing period.
@@ -174,7 +174,7 @@ running it again changes nothing. Every item has the same form,
   and `unbind vaults agent-3f9c1a2b7d4e5f60` remove all of that agent's
   messaging apps or vaults.
 
-`<agent-id>` is the AGENT column of `hc sandbox agents <id>`, which also shows
+`<agent-id>` is the AGENT column of `hc sandbox ls-agents <id>`, which also shows
 each agent's current name and model, and is the value `--agent` takes in
 `persona` and `msg`.
 

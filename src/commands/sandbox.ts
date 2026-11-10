@@ -571,17 +571,17 @@ export function registerSandbox(program: Command): void {
     .action(ls)
 
   sandbox
-    .command("tiers")
+    .command("ls-tiers")
     .description("list the sizes a sandbox can be created with")
     .option("--json", "print the API response JSON")
     .action(tiers)
 
   sandbox
     .command("create <tier> <name>")
-    .description("create a sandbox of a tier from `hc sandbox tiers` and wait until it is provisioned")
+    .description("create a sandbox of a tier from `hc sandbox ls-tiers` and wait until it is provisioned")
     .option("--model <connector-id>", "model connector for the default agent")
     .option("--timezone <tz>", "sandbox timezone, e.g. Asia/Shanghai")
-    .option("--recover <id>", "attach the kept files of a deleted sandbox from `hc sandbox recoverable`")
+    .option("--recover <id>", "attach the kept files of a deleted sandbox from `hc sandbox ls-recoverable`")
     .option("--restore-agents", "with --recover: restore its agents backup")
     .option("--restore-browser", "with --recover: restore its browser backup")
     .option("--detach", "return at once; check progress with `hc sandbox job`")
@@ -617,13 +617,13 @@ export function registerSandbox(program: Command): void {
     .action(usage)
 
   sandbox
-    .command("agents <id>")
+    .command("ls-agents <id>")
     .description("list the agents of a sandbox")
     .option("--json", "print the API response JSON")
     .action(agents)
 
   sandbox
-    .command("recoverable")
+    .command("ls-recoverable")
     .description("list deleted sandboxes whose files can be recovered into a new one")
     .option("--limit <n>", "maximum number to return", DEFAULT_PAGE_SIZE)
     .option("--page <n>", "page number, from 1", "1")
@@ -631,7 +631,7 @@ export function registerSandbox(program: Command): void {
     .action(recoverable)
 
   sandbox
-    .command("recoverable-rm <id>")
+    .command("rm-recoverable <id>")
     .description("delete the kept files of a deleted sandbox for good")
     .option("--force", "do not ask for confirmation")
     .option("--json", "print the API response JSON")
