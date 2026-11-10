@@ -277,9 +277,12 @@ async function agents(id: string, options: OutputOptions): Promise<void> {
 
 // Change some agents: the route replaces the whole agent list, so read it,
 // apply `change`, and send all of it back.
-async function updateAgents(id: string, change: (agents: any[]) => any[]): Promise<any> {
+async function updateAgents(
+  id: string,
+  change: (agents: any[]) => any[] | Promise<any[]>
+): Promise<any> {
   const url = `${PROVISION_API}/sandbox/agents/${id}`
-  const agents = change((await apiJson(url)).agents).map((agent) => ({
+  const agents = (await change((await apiJson(url)).agents)).map((agent) => ({
     id: agent.id,
     display_name: agent.display_name,
     model_rid: agent.model_rid
@@ -359,14 +362,14 @@ async function unbind(
 ): Promise<void> {
   let data
   if (kind === "agents") {
-    if (!options.force) {
-      await confirm(`Remove the agent(s) ${agentIds.join(", ")} and their data?`)
-    }
-    data = await updateAgents(id, (agents) => {
+    data = await updateAgents(id, async (agents) => {
       for (const agentId of agentIds) {
         if (!agents.some((agent) => agent.id === agentId)) {
           throw new Error(`no such agent: ${agentId}`)
         }
+      }
+      if (!options.force) {
+        await confirm(`Remove the agent(s) ${agentIds.join(", ")} and their data?`)
       }
       return agents.filter((agent) => !agentIds.includes(agent.id))
     })
