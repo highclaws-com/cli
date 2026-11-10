@@ -641,13 +641,20 @@ export function registerSandbox(program: Command): void {
     .command("bind <id>")
     .addArgument(new Argument("<kind>").choices(BIND_KINDS))
     .argument("<specs...>")
-    .description(
-      "set the agents named and leave the others as they are. " +
-        "Every item is <agent-id>:<display name>=<id>,<id>. " +
-        "agents: the display name and one model connector ID " +
-        "(the agent is created if new). " +
-        "ims|vaults: the connector IDs; the name part is left empty"
-    )
+    .description("bind a model, messaging apps, or vaults to an agent")
+    .addHelpText("after", `
+Each item is <agent-id>:<display name>=<id>,<id>. Other agents are left as they are.
+
+  agents  bind a model connector, with the agent's display name; a new ID adds an agent
+          hc sandbox bind a1b2c3d4e5f60718293a4b5c6d7e8f90-20261110-151801 \\
+            agents "agent-3f9c1a2b7d4e5f60:Research Lead=104"
+  ims     bind messaging app connectors
+          hc sandbox bind a1b2c3d4e5f60718293a4b5c6d7e8f90-20261110-151801 \\
+            ims agent-3f9c1a2b7d4e5f60:=30,29
+  vaults  bind vault connectors
+          hc sandbox bind a1b2c3d4e5f60718293a4b5c6d7e8f90-20261110-151801 \\
+            vaults agent-3f9c1a2b7d4e5f60:=2
+`)
     .option("--json", "print the API response JSON")
     .action(bind)
 
@@ -655,10 +662,7 @@ export function registerSandbox(program: Command): void {
     .command("unbind <id>")
     .addArgument(new Argument("<kind>").choices(BIND_KINDS))
     .argument("<agent-ids...>")
-    .description(
-      "agents: remove the agents named. " +
-        "ims|vaults: remove all messaging apps or vaults of the agents named"
-    )
+    .description("unbind an agent, or all of its messaging apps or vaults")
     .option("--force", "agents: do not ask for confirmation")
     .option("--json", "print the API response JSON")
     .action(unbind)
