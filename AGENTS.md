@@ -123,7 +123,7 @@ hc sandbox timezone <id> <tz>
 
 `<tier>` is a TIER from `hc sandbox tiers`, which also shows the units each
 one costs. Before creating, check `hc account quota`: the tier's units must fit
-in what is left of "sandbox units". `hc account plan` shows the current plan.
+in what is left of "compute units". `hc account plan` shows the current plan.
 `--agent` defaults to `default`.
 
 Connectors (models, messaging apps, vaults) are saved once and then bound to
