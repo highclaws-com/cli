@@ -146,8 +146,8 @@ hc connector new models|ims|vaults --provider <provider> --name <name> \
   [--model <model-id>] [--key <field=value>]... [--key-file <json-file>]
 hc connector new ims --provider Weixin --name <name> --qr <file>
 hc connector rm models|ims|vaults <connector-id>
-hc sandbox bind <id> agents <agent-id>:<display name>=<model-connector-id>... [--force]
-hc sandbox bind <id> ims|vaults <agent-id>=<connector-id>[,<connector-id>]...
+hc sandbox bind <id> agents|ims|vaults <agent-id>:<display name>=<id>,<id>
+hc sandbox unbind <id> agents|ims|vaults <agent-id> [--force]
 ```
 
 `connector schema` lists what the server accepts: each provider, its
@@ -159,17 +159,20 @@ is named in the error. `--key-file` supplies all fields from one
 JSON file. `--qr` saves a QR code image to `<file>` and waits until the user
 has scanned and confirmed it, so show that file to the user.
 
-Every `bind` states the wanted result in full, so running it again changes
-nothing. Each kind has exactly one form; anything else is an error.
+`bind` sets the agents it names and leaves every other agent as it is, so
+running it again changes nothing. Every item has the same form,
+`<agent-id>:<display name>=<id>,<id>`, and values go to the server as typed.
 
-- `bind agents` is the sandbox's full agent list, `default` first, e.g.
-  `default:=109 "researcher:Research Lead=104"`. Each item is the agent's ID,
-  its display name, and its model; an empty name or model means none. The
-  sandbox ends up with exactly the agents listed: one that does not exist is
-  created with that ID, and one left out is removed with its data (the command
-  asks first unless `--force` is given).
-- `bind ims` and `bind vaults` set the connectors of each agent listed, e.g.
-  `default=30,29`; `default=` removes them all. Agents not listed keep theirs.
+- `bind agents "agent-3f9c1a2b7d4e5f60:Research Lead=104"` sets that agent's
+  display name and its one model connector; an empty name or ID means none.
+  An agent that does not exist is created with that ID.
+- `bind ims agent-3f9c1a2b7d4e5f60:=30,29` and
+  `bind vaults agent-3f9c1a2b7d4e5f60:=2` set that agent's messaging apps or
+  vaults to the connectors listed; the name part is left empty.
+- `unbind agents agent-3f9c1a2b7d4e5f60` removes that agent with its data; it
+  asks first unless `--force` is given. `unbind ims agent-3f9c1a2b7d4e5f60`
+  and `unbind vaults agent-3f9c1a2b7d4e5f60` remove all of that agent's
+  messaging apps or vaults.
 
 `<agent-id>` is the AGENT column of `hc sandbox agents <id>`, which also shows
 each agent's current name and model, and is the value `--agent` takes in

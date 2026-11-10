@@ -37,12 +37,13 @@ hc sandbox create <tier> <name> --recover <id> --restore-agents
 # or return at once and check a job later
 hc sandbox create <tier> <name> --detach
 hc sandbox job <job-id>
-# set the sandbox's agents as <agent-id>:<display name>=<model-connector-id>;
-# an agent left out is removed
-hc sandbox bind <id> agents default:=<connector-id> "researcher:Research Lead=<connector-id>"
+# set an agent's display name and model; creates the agent if it is new
+hc sandbox bind <id> agents "agent-3f9c1a2b7d4e5f60:Research Lead=<connector-id>"
+# remove an agent
+hc sandbox unbind <id> agents agent-3f9c1a2b7d4e5f60
 # set an agent's messaging apps or vaults
-hc sandbox bind <id> ims default=<connector-id>,<connector-id>
-hc sandbox bind <id> vaults default=<connector-id>
+hc sandbox bind <id> ims agent-3f9c1a2b7d4e5f60:=<connector-id>,<connector-id>
+hc sandbox bind <id> vaults agent-3f9c1a2b7d4e5f60:=<connector-id>
 # set an agent's persona, or the sandbox timezone
 hc sandbox persona <id> ./persona.txt
 hc sandbox timezone <id> Asia/Shanghai
@@ -285,9 +286,9 @@ A subcommand is added only when the agent cannot do the job:
 
 ### Changing things
 
-- `hc sandbox bind` states the wanted result (the agent list, an agent's
-  connectors), so running it twice changes nothing. Do not add separate add
-  and remove commands for these.
+- `hc sandbox bind` sets the agents it names and leaves every other agent as
+  it is; running it twice changes nothing. Leaving an agent out never removes
+  it: removal is `hc sandbox unbind`.
 - A command that destroys something asks first; `--force` skips the question.
 - Spending money and account security stay in the console: changing plan,
   buying model quota, changing email or password, deleting the account.

@@ -1,6 +1,6 @@
 import crypto from "node:crypto"
 import fs from "node:fs"
-import { Command } from "commander"
+import { Argument, Command } from "commander"
 import { APP_DOMAIN } from "../config"
 import { apiFetch, apiJson, apiRequest, hostBase } from "../api"
 import {
@@ -20,6 +20,8 @@ const BIND_TABLES: Record<string, string> = {
   ims: "connectors",
   vaults: "passwords"
 }
+
+const BIND_KINDS = ["agents", ...Object.keys(BIND_TABLES)]
 
 interface AgentOptions extends OutputOptions {
   agent: string
@@ -273,62 +275,107 @@ async function agents(id: string, options: OutputOptions): Promise<void> {
   })
 }
 
-// Set what a sandbox's agents are bound to. Each kind states the wanted
-// result in full, so running the same command twice changes nothing:
-//   agents default:=104 "researcher:Research Lead=105"
-//       the full agent list as <agent-id>:<display name>=<model-connector-id>;
-//       an empty name or model means none, and an agent left out is removed
-//   ims default=30,29 researcher=26     each listed agent's messaging apps
-//   vaults default=2                    each listed agent's vaults
+// Change some agents: the route replaces the whole agent list, so read it,
+// apply `change`, and send all of it back.
+async function updateAgents(id: string, change: (agents: any[]) => any[]): Promise<any> {
+  const url = `${PROVISION_API}/sandbox/agents/${id}`
+  const agents = change((await apiJson(url)).agents).map((agent) => ({
+    id: agent.id,
+    display_name: agent.display_name,
+    model_rid: agent.model_rid
+  }))
+  const data = await apiJson(url, "PUT", { agents })
+  await waitJob(data.reload_job_id)
+  return data
+}
+
+// Set the messaging apps (kind ims) or vaults of some agents, e.g.
+// [{ profile_id: "agent-3f9c1a2b7d4e5f60", rids: [30, 29] }].
+async function updateConnectors(id: string, kind: string, profiles: unknown[]): Promise<any> {
+  const data = await apiJson(
+    `${PROVISION_API}/sandbox/${BIND_TABLES[kind]}/${id}`, "PUT", profiles
+  )
+  await waitJob(data.reload_job_id)
+  return data
+}
+
+// The one form of a `hc sandbox bind` item, for every kind:
+//   "agent-3f9c1a2b7d4e5f60:Research Lead=30,29"
+//   -> { agentId: "agent-3f9c1a2b7d4e5f60", name: "Research Lead", ids: "30,29" }
+function parseBinding(spec: string): { agentId: string; name: string; ids: string } {
+  const [agent, ids, ...afterIds] = spec.split("=")
+  const [agentId, name, ...afterName] = agent.split(":")
+  if (ids === undefined || name === undefined || afterIds.length || afterName.length) {
+    throw new Error(
+      `bad item "${spec}": expected <agent-id>:<display name>=<id>,<id> ` +
+        'with one ":" and one "=", e.g. "agent-3f9c1a2b7d4e5f60:Research Lead=104" ' +
+        'or "agent-3f9c1a2b7d4e5f60:=30,29"'
+    )
+  }
+  return { agentId, name, ids }
+}
+
+// Set the agents named, and leave every other agent as it is. Values go to
+// the server as typed.
+//   agents "agent-3f9c1a2b7d4e5f60:Research Lead=105"
+//       display name and model connector; the agent is created if new
+//   ims agent-3f9c1a2b7d4e5f60:=30,29
+//       the agent's messaging apps
+//   vaults agent-3f9c1a2b7d4e5f60:=2
+//       the agent's vaults
 async function bind(
   id: string,
   kind: string,
   specs: string[],
+  options: OutputOptions
+): Promise<void> {
+  const bindings = specs.map(parseBinding)
+  let data
+  if (kind === "agents") {
+    data = await updateAgents(id, (agents) => {
+      // A Map keeps each agent's place; a new agent goes last.
+      const byId = new Map(agents.map((agent) => [agent.id, agent]))
+      for (const { agentId, name, ids } of bindings) {
+        // An empty name or model means none.
+        byId.set(agentId, { id: agentId, display_name: name || null, model_rid: ids || null })
+      }
+      return [...byId.values()]
+    })
+  } else {
+    data = await updateConnectors(id, kind, bindings.map(({ agentId, ids }) => (
+      { profile_id: agentId, rids: ids.split(",") }
+    )))
+  }
+  output(options, data, () => console.log(`${kind} set: ${specs.join(" ")}`))
+}
+
+// Remove the agents named (kind agents), or all of their messaging apps or
+// vaults (kind ims or vaults).
+async function unbind(
+  id: string,
+  kind: string,
+  agentIds: string[],
   options: OutputOptions & { force?: boolean }
 ): Promise<void> {
   let data
   if (kind === "agents") {
-    const current = (await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)).agents
-    const agents = specs.map((spec) => {
-      const parts = spec.match(/^([^:=]+):(.*)=(\d*)$/)
-      if (!parts) {
-        throw new Error(`"${spec}" is not <agent-id>:<display name>=<model-connector-id>`)
-      }
-      const [, agent, name, model] = parts
-      return {
-        id: agent,
-        display_name: name || null,
-        model_rid: model ? Number(model) : null
-      }
-    })
-    const removed = current
-      .filter((item: any) => !agents.some((agent) => agent.id === item.id))
-      .map((item: any) => item.id)
-    if (removed.length && !options.force) {
-      await confirm(`This removes the agent(s) ${removed.join(", ")} and their data. Continue?`)
+    if (!options.force) {
+      await confirm(`Remove the agent(s) ${agentIds.join(", ")} and their data?`)
     }
-    data = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`, "PUT", { agents })
-    await waitJob(data.reload_job_id)
-  } else if (BIND_TABLES[kind]) {
-    data = await apiJson(
-      `${PROVISION_API}/sandbox/${BIND_TABLES[kind]}/${id}`,
-      "PUT",
-      specs.map((spec) => {
-        const parts = spec.match(/^([^:=]+)=([\d,]*)$/)
-        if (!parts) {
-          throw new Error(`"${spec}" is not <agent-id>=<connector-id>[,<connector-id>]...`)
+    data = await updateAgents(id, (agents) => {
+      for (const agentId of agentIds) {
+        if (!agents.some((agent) => agent.id === agentId)) {
+          throw new Error(`no such agent: ${agentId}`)
         }
-        return {
-          profile_id: parts[1],
-          rids: parts[2].split(",").filter(Boolean).map(Number)
-        }
-      })
-    )
-    await waitJob(data.reload_job_id)
+      }
+      return agents.filter((agent) => !agentIds.includes(agent.id))
+    })
   } else {
-    throw new Error(`kind must be one of: agents, ${Object.keys(BIND_TABLES).join(", ")}`)
+    data = await updateConnectors(
+      id, kind, agentIds.map((agentId) => ({ profile_id: agentId, rids: [] }))
+    )
   }
-  output(options, data, () => console.log(`${kind} set: ${specs.join(" ")}`))
+  output(options, data, () => console.log(`${kind} removed: ${agentIds.join(" ")}`))
 }
 
 async function persona(id: string, file: string, options: AgentOptions): Promise<void> {
@@ -588,17 +635,30 @@ export function registerSandbox(program: Command): void {
     .action(recoverableRm)
 
   sandbox
-    .command("bind <id> <kind> <specs...>")
+    .command("bind <id>")
+    .addArgument(new Argument("<kind>").choices(BIND_KINDS))
+    .argument("<specs...>")
     .description(
-      "set what the agents are bound to; running it again changes nothing. " +
-        "agents: <agent-id>:<display name>=<model-connector-id>... is the full " +
-        "agent list (default first; an empty name or model means none; " +
-        "an agent left out is removed). " +
-        "ims|vaults: <agent-id>=<connector-id>[,<connector-id>]... per listed agent"
+      "set the agents named and leave the others as they are. " +
+        "Every item is <agent-id>:<display name>=<id>,<id>. " +
+        "agents: the display name and one model connector ID " +
+        "(the agent is created if new). " +
+        "ims|vaults: the connector IDs; the name part is left empty"
     )
-    .option("--force", "agents: do not ask before removing an agent")
     .option("--json", "print the API response JSON")
     .action(bind)
+
+  sandbox
+    .command("unbind <id>")
+    .addArgument(new Argument("<kind>").choices(BIND_KINDS))
+    .argument("<agent-ids...>")
+    .description(
+      "agents: remove the agents named. " +
+        "ims|vaults: remove all messaging apps or vaults of the agents named"
+    )
+    .option("--force", "agents: do not ask for confirmation")
+    .option("--json", "print the API response JSON")
+    .action(unbind)
 
   sandbox
     .command("persona <id> <file>")
