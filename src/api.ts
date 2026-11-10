@@ -19,7 +19,9 @@ export async function apiJson(url: string, method = "GET", body?: unknown): Prom
     body: body === undefined ? undefined : JSON.stringify(body),
     redirect: "manual"
   })
-  if (!res.ok) {
+  if (res.status === 401) {
+    throw new Error("login expired: run `hc auth login`")
+  } else if (!res.ok) {
     throw new Error(`${url} failed: HTTP ${res.status} ${await res.text()}`)
   }
   return res.json()
