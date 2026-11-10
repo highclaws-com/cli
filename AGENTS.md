@@ -109,6 +109,9 @@ sandbox wait until the change is applied, printing progress on stderr.
 
 ```sh
 hc sandbox create <tier> <name> [--model <connector-id>] [--timezone <tz>] [--detach]
+hc sandbox recoverable
+hc sandbox recoverable-rm <id> --force
+hc sandbox create <tier> <name> --recover <id> [--restore-agents] [--restore-browser]
 hc sandbox job <job-id> [--wait]
 hc sandbox rm <id> --force
 hc sandbox rename <id> <new-name>
@@ -121,10 +124,16 @@ hc sandbox timezone <id> <tz>
 `create --detach` returns at once with the job IDs to pass to `hc sandbox job`.
 `rm` asks for confirmation unless `--force` is given.
 
+`recoverable` lists deleted sandboxes whose files were kept; `create --recover`
+attaches one's files to the new sandbox, and the two restore options also
+bring back its agents or browser backup when the list shows one.
+
 `<tier>` is a TIER from `hc sandbox tiers`, which also shows the units each
 one costs. Before creating, check `hc account quota`: the tier's units must fit
 in what is left of "compute units". `hc account plan` shows the account's email and join date, the current plan,
 and any credit toward future subscriptions, and `hc account model-usage` the tokens used per model in this billing period.
+`hc account redeem <code> --force` redeems an invite code; it restarts the
+free trial hours from zero, so ask the user first.
 `--agent` defaults to `default`.
 
 Connectors (models, messaging apps, vaults) are saved once and then bound to
@@ -137,8 +146,8 @@ hc connector new models|ims|vaults --provider <provider> --name <name> \
   [--model <model-id>] [--key <field=value>]... [--key-file <json-file>]
 hc connector new ims --provider Weixin --name <name> --qr <file>
 hc connector rm models|ims|vaults <connector-id>
-hc sandbox bind <id> model <connector-id> [--agent <profile>]
-hc sandbox bind <id> ims|vaults [connector-id...] [--agent <profile>]
+hc sandbox bind <id> agents <agent-id>:<display name>=<model-connector-id>... [--force]
+hc sandbox bind <id> ims|vaults <agent-id>=<connector-id>[,<connector-id>]...
 ```
 
 `connector schema` lists what the server accepts: each provider, its
@@ -150,8 +159,22 @@ is named in the error. `--key-file` supplies all fields from one
 JSON file. `--qr` saves a QR code image to `<file>` and waits until the user
 has scanned and confirmed it, so show that file to the user.
 
-`bind ims` and `bind vaults` replace the agent's current set with the given
-IDs; pass no ID to remove them all.
+Every `bind` states the wanted result in full, so running it again changes
+nothing. Each kind has exactly one form; anything else is an error.
+
+- `bind agents` is the sandbox's full agent list, `default` first, e.g.
+  `default:=109 "agent-3f9c:Research Lead=104"`. All three parts are always
+  written; an empty part means none (`default:=109` has no display name,
+  `agent-3f9c:Helper=` has no model). An empty ID adds an agent
+  (`":Research Lead=104"`); the sandbox picks its ID and the command prints
+  it. An agent left out is removed with its data; the command asks first
+  unless `--force` is given.
+- `bind ims` and `bind vaults` set the connectors of each agent listed, e.g.
+  `default=30,29`; `default=` removes them all. Agents not listed keep theirs.
+
+`<agent-id>` is the AGENT column of `hc sandbox agents <id>`, which also shows
+each agent's current name and model, and is the value `--agent` takes in
+`persona` and `msg`.
 
 ## Message the sandbox agent
 
@@ -159,12 +182,15 @@ Anything the sandbox agent manages itself (scheduled jobs, files, its browser)
 is done by asking it. `<host>` is the HOST column from `hc sandbox ls`.
 
 ```sh
-hc sandbox msg <host> "<message>" [--agent <profile>] [--conversation <key>]
+hc sandbox msg <host> "<message>" [--agent <profile>] [--conversation <key>] [--no-toolcall-print]
 ```
 
 The reply is printed as it arrives, followed by `conversation: <key>`. Each
 call starts a new conversation unless that key is passed back with
-`--conversation`. With `--json` the output is `{"conversation", "text"}`.
+`--conversation`. Each tool call is printed too, on stderr, as
+`> <tool> <arguments>` with its result as `< <result>`; `--no-toolcall-print`
+leaves them out. With `--json` the output is `{"conversation", "text",
+"activity"}`.
 
 The agent cannot reach the backup of the sandbox's files, so use the CLI for
 it. It prints the last backup's start and finish times, starts one now, or
@@ -174,6 +200,10 @@ lists a folder of the backup:
 hc sandbox file-backup <host> [--trigger]
 hc sandbox file-backup <host> --list <dir> [--page <n>]
 ```
+
+To rotate the file sync token or the Safe Connect access code, ask the agent
+through `msg`; it does both through its sandbox management API. Then read the
+new value with `hc sandbox get-sync-token` or `hc sandbox get-endpoint`.
 
 If the agent does not answer, restart it, then send the message again:
 

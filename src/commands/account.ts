@@ -1,7 +1,7 @@
 import { Command } from "commander"
 import { APP_DOMAIN } from "../config"
 import { apiJson } from "../api"
-import { OutputOptions, output, printRows } from "../output"
+import { OutputOptions, confirm, output, printRows } from "../output"
 
 const BILLING_API = `https://${APP_DOMAIN}/billing/api/v1`
 const PROVISION_API = `https://${APP_DOMAIN}/provision/api/v1`
@@ -178,6 +178,30 @@ async function plan(options: OutputOptions): Promise<void> {
   })
 }
 
+// Redeem an invite code for trial hours and model quota.
+async function redeem(
+  code: string,
+  options: OutputOptions & { force?: boolean }
+): Promise<void> {
+  code = code.trim().toUpperCase()
+  const check = await apiJson(
+    `https://${APP_DOMAIN}/admission/api/v1/code/validate/${encodeURIComponent(code)}`
+  )
+  if (!check.valid) throw new Error("this invite code is wrong or used up")
+  if (!options.force) {
+    await confirm("Redeeming restarts the free trial hours from zero. Redeem?")
+  }
+  const data = await apiJson(`https://${APP_DOMAIN}/admission/api/v1/code/redeem`, "POST", {
+    invite_code: code
+  })
+  output(options, data, () => {
+    console.log(
+      `redeemed: ${data.bonus.trial_hours_addition ?? 0} extra trial hours, ` +
+        `$${data.bonus.model_quota_dollars_addition ?? 0} extra model quota`
+    )
+  })
+}
+
 export function registerAccount(program: Command): void {
   const account = program.command("account").description("show the account, its plan, and its usage")
 
@@ -192,6 +216,13 @@ export function registerAccount(program: Command): void {
     .description("show what the account has used and may use")
     .option("--json", "print the API responses as JSON")
     .action(quota)
+
+  account
+    .command("redeem <code>")
+    .description("redeem an invite code for trial hours and model quota")
+    .option("--force", "do not ask for confirmation")
+    .option("--json", "print the API response JSON")
+    .action(redeem)
 
   account
     .command("plan")

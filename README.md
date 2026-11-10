@@ -15,6 +15,8 @@ hc auth logout
 hc account plan
 hc account quota
 hc account model-usage
+# redeem an invite code
+hc account redeem <code>
 # list the sizes a sandbox can be created with
 hc sandbox tiers
 # list sandboxes; add --json to any sandbox or connector command for JSON
@@ -28,11 +30,19 @@ hc connector new ims --provider Discord --name my-bot --key bot_token=<token>
 hc connector rm ims <connector-id>
 # create a sandbox whose default agent uses a model connector
 hc sandbox create <tier> <name> --model <connector-id>
+# recover the files of a deleted sandbox into a new one, or delete them for good
+hc sandbox recoverable
+hc sandbox recoverable-rm <id>
+hc sandbox create <tier> <name> --recover <id> --restore-agents
 # or return at once and check a job later
 hc sandbox create <tier> <name> --detach
 hc sandbox job <job-id>
-# replace an agent's model, messaging apps, or vaults
-hc sandbox bind <id> ims <connector-id> <connector-id>
+# set the sandbox's agents as <agent-id>:<display name>=<model-connector-id>;
+# an empty ID adds an agent, and an agent left out is removed
+hc sandbox bind <id> agents default:=<connector-id> ":Research Lead=<connector-id>"
+# set an agent's messaging apps or vaults
+hc sandbox bind <id> ims default=<connector-id>,<connector-id>
+hc sandbox bind <id> vaults default=<connector-id>
 # set an agent's persona, or the sandbox timezone
 hc sandbox persona <id> ./persona.txt
 hc sandbox timezone <id> Asia/Shanghai
@@ -227,7 +237,9 @@ curl "$URL/v1/models" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-## Design rule
+## Design choices
+
+### Ask the agent first
 
 Anything the sandbox can do for itself is done by asking its agent:
 
@@ -236,18 +248,55 @@ hc sandbox msg <host> "start the remote desktop"
 ```
 
 Do not add a subcommand that wraps a sandbox-side API (worktrees, browser,
-remote desktop, scheduled jobs, databases, backups). The agent already knows
-those APIs, so one `msg` command covers them all, including ones added later,
-with no CLI code to maintain. Tokens are cheap; code is not.
+remote desktop, scheduled jobs, databases, backups, rotating the sync token or
+the Safe Connect access code). The agent already knows those APIs, so one `msg`
+command covers them all, including ones added later, with no CLI code to
+maintain. Tokens are cheap; code is not.
 
 A subcommand is added only when the agent cannot do the job:
 
 - it runs on this computer: `safe-expose`, `safe-forward`, `proxy`, `expose`,
   `sync`, and the values they need from the sandbox;
-- it acts on the platform, outside any sandbox: creating, deleting, and
-  configuring sandboxes, and listing connectors;
+- it acts on the platform, outside any sandbox: the account, connectors, and
+  creating, deleting, and configuring sandboxes;
 - it must work when the agent does not answer: `hc sandbox restart`;
 - the agent cannot reach the service: `hc sandbox file-backup`.
+
+### A thin wrapper
+
+- A command passes on what its API takes. Platform routes are keyed by sandbox
+  ID and sandbox routes live on the sandbox's host, so some commands take
+  `<id>` and others `<host>`. Do not add a lookup to hide that.
+- The CLI keeps no copy of what the server knows. Providers and their fields
+  come from `hc connector schema`, sizes from `hc sandbox tiers`; `connector
+  new` sends fields as given and the server names what is wrong.
+- `hc sandbox msg` saves nothing. It prints the conversation key, and the
+  caller passes it back to continue.
+
+### Output
+
+- Rows by default, `--json` for the API response. Progress, tool calls, and
+  the page line go to stderr, so stdout can be piped.
+- Rows use words a user sees in the console ("Free Trial", "compute units"),
+  not the server's identifiers. What a row shows follows the console page that
+  shows the same thing.
+- `--page` counts from 1, the default page size is the console's, and a page
+  that does not exist is an error.
+
+### Changing things
+
+- `hc sandbox bind` states the wanted result (the agent list, an agent's
+  connectors), so running it twice changes nothing. Do not add separate add
+  and remove commands for these.
+- A command that destroys something asks first; `--force` skips the question.
+- Spending money and account security stay in the console: changing plan,
+  buying model quota, changing email or password, deleting the account.
+
+### Left out on purpose
+
+- Invoices.
+- Reading a backed-up file. `file-backup --list` exists so an agent can check
+  whether a file has been backed up.
 
 ## Development
 

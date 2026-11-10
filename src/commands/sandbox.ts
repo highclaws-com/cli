@@ -1,10 +1,11 @@
 import crypto from "node:crypto"
 import fs from "node:fs"
-import readline from "node:readline/promises"
 import { Command } from "commander"
 import { APP_DOMAIN } from "../config"
 import { apiFetch, apiJson, apiRequest, hostBase } from "../api"
-import { OutputOptions, checkPage, output, pageNumber, printPage, printRows } from "../output"
+import {
+  OutputOptions, byteSize, checkPage, confirm, output, pageNumber, printPage, printRows
+} from "../output"
 import { DEFAULT_PAGE_SIZE } from "./connector"
 
 const PROVISION_API = `https://${APP_DOMAIN}/provision/api/v1`
@@ -128,12 +129,24 @@ async function ls(
 async function create(
   tier: string,
   name: string,
-  options: OutputOptions & { model?: string; timezone?: string; detach?: boolean }
+  options: OutputOptions & {
+    model?: string
+    timezone?: string
+    detach?: boolean
+    recover?: string
+    restoreAgents?: boolean
+    restoreBrowser?: boolean
+  }
 ): Promise<void> {
-  const query = options.timezone
-    ? `?timezone=${encodeURIComponent(options.timezone)}`
-    : ""
-  const data = await apiJson(`${PROVISION_API}/job/${tier}/${name}${query}`, "POST", {
+  if ((options.restoreAgents || options.restoreBrowser) && !options.recover) {
+    throw new Error("--restore-agents and --restore-browser need --recover <id>")
+  }
+  const query = new URLSearchParams()
+  if (options.timezone) query.set("timezone", options.timezone)
+  if (options.recover) query.set("recover_storage", options.recover)
+  const data = await apiJson(`${PROVISION_API}/job/${tier}/${name}?${query}`, "POST", {
+    restore_agents: Boolean(options.restoreAgents),
+    restore_browser: Boolean(options.restoreBrowser),
     init_agents: [{
       id: "default",
       display_name: null,
@@ -161,13 +174,46 @@ async function create(
   }
 }
 
+// The kept files of deleted sandboxes, which `create --recover` can attach.
+async function recoverable(
+  options: OutputOptions & { limit: string; page: string }
+): Promise<void> {
+  const limit = Number(options.limit)
+  const page = pageNumber(options.page)
+  const data = await apiJson(
+    `${PROVISION_API}/orphan-bkt?include_claimed=false&limit=${limit}&page=${page - 1}`
+  )
+  checkPage(page, limit, data.total_records)
+  output(options, data, () => {
+    // Backup times are in milliseconds; none means there is no such backup.
+    const time = (ms?: number) => ms ? new Date(ms).toISOString() : undefined
+    printRows(
+      ["ID", "NAME", "DELETED", "AGENTS-BACKUP", "BROWSER-BACKUP"],
+      data.items.map((item: any) => [
+        item.provision_id,
+        item.name,
+        item.created_at,
+        time(item.backups?.agents),
+        time(item.backups?.browser)
+      ])
+    )
+    printPage(page, limit, data.total_records)
+  })
+}
+
+// Delete the kept files of a deleted sandbox for good.
+async function recoverableRm(
+  id: string,
+  options: OutputOptions & { force?: boolean }
+): Promise<void> {
+  if (!options.force) await confirm(`Delete the kept files of ${id} for good?`)
+  const data = await apiJson(`${PROVISION_API}/orphan-bkt/${id}`, "DELETE")
+  await waitJob(data.delete_job_id)
+  output(options, data, () => console.log(`deleted the kept files of ${id}`))
+}
+
 async function rm(id: string, options: OutputOptions & { force?: boolean }): Promise<void> {
-  if (!options.force) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stderr })
-    const answer = await rl.question(`Delete sandbox ${id}? [y/N] `)
-    rl.close()
-    if (answer.trim().toLowerCase() !== "y") throw new Error("aborted")
-  }
+  if (!options.force) await confirm(`Delete sandbox ${id}?`)
   const data = await apiJson(`${PROVISION_API}/provision/${id}`, "DELETE")
   await waitJob(data.delete_job_id)
   output(options, data, () => console.log(`deleted ${id}`))
@@ -227,40 +273,77 @@ async function agents(id: string, options: OutputOptions): Promise<void> {
   })
 }
 
+// Set what a sandbox's agents are bound to. Each kind states the wanted
+// result in full, so running the same command twice changes nothing:
+//   agents default:=104 "agent-3f9c:Research Lead=105" ":Helper="
+//       the full agent list as <agent-id>:<display name>=<model-connector-id>;
+//       an empty part means none, an empty ID is a new agent, and an agent
+//       left out is removed
+//   ims default=30,29 agent-3f9c=26     each listed agent's messaging apps
+//   vaults default=2                    each listed agent's vaults
 async function bind(
   id: string,
   kind: string,
-  connectorIds: string[],
-  options: AgentOptions
+  specs: string[],
+  options: OutputOptions & { force?: boolean }
 ): Promise<void> {
-  const rids = connectorIds.map(Number)
   let data
-  if (kind === "model") {
-    if (rids.length !== 1) throw new Error("bind model takes exactly one connector ID")
-    // The route replaces the whole agent list, so send every agent back.
-    const current = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)
-    if (!current.agents.some((agent: any) => agent.id === options.agent)) {
-      throw new Error(`no such agent: ${options.agent}`)
-    }
-    data = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`, "PUT", {
-      agents: current.agents.map((agent: any) => ({
-        id: agent.id,
-        display_name: agent.display_name,
-        model_rid: agent.id === options.agent ? rids[0] : agent.model_rid
-      }))
+  if (kind === "agents") {
+    const current = (await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)).agents
+    const agents = specs.map((spec) => {
+      const parts = spec.match(/^([^:=]*):(.*)=(\d*)$/)
+      if (!parts) {
+        throw new Error(
+          `"${spec}" is not <agent-id>:<display name>=<model-connector-id>; ` +
+            "leave a part empty for none"
+        )
+      }
+      const [, agent, name, model] = parts
+      if (agent && !current.some((item: any) => item.id === agent)) {
+        throw new Error(`no such agent: ${agent}; leave the ID empty to add an agent`)
+      }
+      return {
+        // The sandbox picks a new agent's ID.
+        id: agent || null,
+        display_name: name || null,
+        model_rid: model ? Number(model) : null
+      }
     })
+    const removed = current
+      .filter((item: any) => !agents.some((agent) => agent.id === item.id))
+      .map((item: any) => item.id)
+    if (removed.length && !options.force) {
+      await confirm(`This removes the agent(s) ${removed.join(", ")} and their data. Continue?`)
+    }
+    data = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`, "PUT", { agents })
+    await waitJob(data.reload_job_id)
+    // The IDs the sandbox gave to the agents this command added.
+    data.added = (await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)).agents
+      .filter((agent: any) => !current.some((item: any) => item.id === agent.id))
   } else if (BIND_TABLES[kind]) {
     data = await apiJson(
       `${PROVISION_API}/sandbox/${BIND_TABLES[kind]}/${id}`,
       "PUT",
-      [{ profile_id: options.agent, rids }]
+      specs.map((spec) => {
+        const parts = spec.match(/^([^:=]+)=([\d,]*)$/)
+        if (!parts) {
+          throw new Error(`"${spec}" is not <agent-id>=<connector-id>[,<connector-id>]...`)
+        }
+        return {
+          profile_id: parts[1],
+          rids: parts[2].split(",").filter(Boolean).map(Number)
+        }
+      })
     )
+    await waitJob(data.reload_job_id)
   } else {
-    throw new Error(`kind must be one of: model, ${Object.keys(BIND_TABLES).join(", ")}`)
+    throw new Error(`kind must be one of: agents, ${Object.keys(BIND_TABLES).join(", ")}`)
   }
-  await waitJob(data.reload_job_id)
   output(options, data, () => {
-    console.log(`bound ${kind} ${connectorIds.join(",") || "(none)"} to ${options.agent}`)
+    console.log(`${kind} set: ${specs.join(" ")}`)
+    for (const agent of data.added ?? []) {
+      console.log(`added agent ${agent.id} ${agent.display_name ?? ""}`.trimEnd())
+    }
   })
 }
 
@@ -328,7 +411,7 @@ async function fileBackup(
         ["TYPE", "SIZE", "MODIFIED", "PATH"],
         data.items.map((item: any) => [
           item.isDir ? "dir" : "file",
-          item.isDir ? undefined : item.size,
+          item.isDir ? undefined : byteSize(item.size),
           new Date(item.mtime).toISOString(),
           item.path
         ])
@@ -358,10 +441,14 @@ async function restart(host: string, options: OutputOptions): Promise<void> {
 
 // Send one message to an agent and print its reply as it arrives. The
 // conversation key is printed last; pass it back to continue that conversation.
+// Each tool call and its result is printed too, on stderr, unless
+// --no-toolcall-print is given:
+//   > terminal {"command": "date -u"}
+//   < {"output": "Tue Nov 10 14:12:00 UTC 2026", "exit_code": 0}
 async function msg(
   host: string,
   message: string,
-  options: AgentOptions & { conversation?: string }
+  options: AgentOptions & { conversation?: string; toolcallPrint: boolean }
 ): Promise<void> {
   const conversation = options.conversation ?? `conv_${crypto.randomUUID()}`
   // Agents other than the default one are served under /p/<profile>.
@@ -379,6 +466,7 @@ async function msg(
     { Accept: "text/event-stream", Authorization: `Bearer ${AGENT_API_KEY}` }
   )
   let text = ""
+  const activity: any[] = []
   let buffer = ""
   const decoder = new TextDecoder()
   for await (const chunk of res.body!) {
@@ -393,12 +481,22 @@ async function msg(
         const delta = JSON.parse(data!).delta
         text += delta
         if (!options.json) process.stdout.write(delta)
+      } else if (type === "response.output_item.done" && options.toolcallPrint) {
+        const item = JSON.parse(data!).item
+        if (item.type === "function_call") {
+          activity.push({ tool: item.name, arguments: item.arguments })
+          console.error(`> ${item.name} ${item.arguments}`)
+        } else if (item.type === "function_call_output") {
+          const result = item.output.map((part: any) => part.text).join("")
+          activity.push({ result })
+          console.error(`< ${result}`)
+        }
       } else if (type === "response.failed") {
         throw new Error(`agent failed: ${data}`)
       }
     }
   }
-  output(options, { conversation, text }, () => {
+  output(options, { conversation, text, ...(options.toolcallPrint ? { activity } : {}) }, () => {
     console.log(`\nconversation: ${conversation}`)
   })
 }
@@ -449,6 +547,9 @@ export function registerSandbox(program: Command): void {
     .description("create a sandbox of a tier from `hc sandbox tiers` and wait until it is provisioned")
     .option("--model <connector-id>", "model connector for the default agent")
     .option("--timezone <tz>", "sandbox timezone, e.g. Asia/Shanghai")
+    .option("--recover <id>", "attach the kept files of a deleted sandbox from `hc sandbox recoverable`")
+    .option("--restore-agents", "with --recover: restore its agents backup")
+    .option("--restore-browser", "with --recover: restore its browser backup")
     .option("--detach", "return at once; check progress with `hc sandbox job`")
     .option("--json", "print the API response JSON")
     .action(create)
@@ -488,12 +589,30 @@ export function registerSandbox(program: Command): void {
     .action(agents)
 
   sandbox
-    .command("bind <id> <kind> [connector-ids...]")
+    .command("recoverable")
+    .description("list deleted sandboxes whose files can be recovered into a new one")
+    .option("--limit <n>", "maximum number to return", DEFAULT_PAGE_SIZE)
+    .option("--page <n>", "page number, from 1", "1")
+    .option("--json", "print the API response JSON")
+    .action(recoverable)
+
+  sandbox
+    .command("recoverable-rm <id>")
+    .description("delete the kept files of a deleted sandbox for good")
+    .option("--force", "do not ask for confirmation")
+    .option("--json", "print the API response JSON")
+    .action(recoverableRm)
+
+  sandbox
+    .command("bind <id> <kind> <specs...>")
     .description(
-      "replace an agent's connectors (kind: model|ims|vaults); " +
-        "connector IDs are from `hc connector ls`"
+      "set what the agents are bound to; running it again changes nothing. " +
+        "agents: <agent-id>:<display name>=<model-connector-id>... is the full " +
+        "agent list (default first; an empty part means none; an empty ID adds " +
+        "an agent; an agent left out is removed). " +
+        "ims|vaults: <agent-id>=<connector-id>[,<connector-id>]... per listed agent"
     )
-    .option("--agent <profile>", "agent to change", "default")
+    .option("--force", "agents: do not ask before removing an agent")
     .option("--json", "print the API response JSON")
     .action(bind)
 
@@ -530,6 +649,7 @@ export function registerSandbox(program: Command): void {
     .description("send a message to an agent and print its reply")
     .option("--agent <profile>", "agent to message", "default")
     .option("--conversation <key>", "continue the conversation with this key")
+    .option("--no-toolcall-print", "do not print each tool call and its result")
     .option("--json", "print the reply and conversation key as JSON")
     .action(msg)
 

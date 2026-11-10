@@ -1,3 +1,5 @@
+import readline from "node:readline/promises"
+
 export interface OutputOptions {
   json?: boolean
 }
@@ -11,6 +13,21 @@ export function printRows(header: string[], rows: unknown[][]): void {
   for (const line of lines) {
     console.log(line.map((cell, i) => cell.padEnd(widths[i])).join("  ").trimEnd())
   }
+}
+
+// A size in bytes in short form: 7158534 -> "6.8 MB".
+export function byteSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"]
+  const i = bytes > 0 ? Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1) : 0
+  return `${parseFloat((bytes / 1024 ** i).toFixed(1))} ${units[i]}`
+}
+
+// Ask a yes/no question on the terminal; anything but "y" fails the command.
+export async function confirm(question: string): Promise<void> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stderr })
+  const answer = await rl.question(`${question} [y/N] `)
+  rl.close()
+  if (answer.trim().toLowerCase() !== "y") throw new Error("aborted")
 }
 
 // With --json print the API response as-is, otherwise the readable form.
