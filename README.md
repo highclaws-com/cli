@@ -37,6 +37,9 @@ hc sandbox agents <id>
 hc sandbox rm <id>
 # send a message to the sandbox agent and print its reply
 hc sandbox msg <host> "pause my daily report job"
+# show the last file backup, or start one now
+hc sandbox file-backup <host>
+hc sandbox file-backup <host> --trigger
 # restart the sandbox agent when it stops answering
 hc sandbox restart <host>
 # let the sandbox reach this computer's SSH server
@@ -235,7 +238,8 @@ A subcommand is added only when the agent cannot do the job:
   `sync`, and the values they need from the sandbox;
 - it acts on the platform, outside any sandbox: creating, deleting, and
   configuring sandboxes, and listing connectors;
-- it must work when the agent does not answer: `hc sandbox restart`.
+- it must work when the agent does not answer: `hc sandbox restart`;
+- the agent cannot reach the service: `hc sandbox file-backup`.
 
 ## Development
 

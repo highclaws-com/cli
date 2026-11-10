@@ -296,6 +296,26 @@ async function getEndpoint(id: string): Promise<void> {
   })).toString("base64url"))
 }
 
+// Show when the sandbox's files were last backed up, or start a backup now.
+// The agent cannot reach this service, so it is not done through `msg`.
+async function fileBackup(
+  host: string,
+  options: OutputOptions & { trigger?: boolean }
+): Promise<void> {
+  if (options.trigger) {
+    const data = await apiJson(`${hostBase(host)}/backup/api/v1/trigger`, "POST")
+    output(options, data, () => console.log(`file backup started on ${host}`))
+  } else {
+    const data = await apiJson(`${hostBase(host)}/backup/api/v1/last_time`)
+    output(options, data, () => {
+      printRows(
+        ["LAST-START", "LAST-FINISH", "QUOTA-EXCEEDED"],
+        [[data.start_time, data.end_time, data.quota_exceeded]]
+      )
+    })
+  }
+}
+
 // Restart the agent's container without going through the agent, so that it
 // also works when the agent is stuck.
 async function restart(host: string, options: OutputOptions): Promise<void> {
@@ -473,6 +493,13 @@ export function registerSandbox(program: Command): void {
     .option("--conversation <key>", "continue the conversation with this key")
     .option("--json", "print the reply and conversation key as JSON")
     .action(msg)
+
+  sandbox
+    .command("file-backup <host>")
+    .description("show when the sandbox files were last backed up")
+    .option("--trigger", "start a backup now instead")
+    .option("--json", "print the API response JSON")
+    .action(fileBackup)
 
   sandbox
     .command("restart <host>")

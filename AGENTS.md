@@ -163,6 +163,13 @@ The reply is printed as it arrives, followed by `conversation: <key>`. Each
 call starts a new conversation unless that key is passed back with
 `--conversation`. With `--json` the output is `{"conversation", "text"}`.
 
+The agent cannot reach the backup of the sandbox's files, so use the CLI for
+it. It prints the last backup's start and finish times, or starts one now:
+
+```sh
+hc sandbox file-backup <host> [--trigger]
+```
+
 If the agent does not answer, restart it, then send the message again:
 
 ```sh
