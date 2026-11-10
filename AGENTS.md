@@ -163,12 +163,11 @@ Every `bind` states the wanted result in full, so running it again changes
 nothing. Each kind has exactly one form; anything else is an error.
 
 - `bind agents` is the sandbox's full agent list, `default` first, e.g.
-  `default:=109 "agent-3f9c:Research Lead=104"`. All three parts are always
-  written; an empty part means none (`default:=109` has no display name,
-  `agent-3f9c:Helper=` has no model). An empty ID adds an agent
-  (`":Research Lead=104"`); the sandbox picks its ID and the command prints
-  it. An agent left out is removed with its data; the command asks first
-  unless `--force` is given.
+  `default:=109 "researcher:Research Lead=104"`. Each item is the agent's ID,
+  its display name, and its model; an empty name or model means none. The
+  sandbox ends up with exactly the agents listed: one that does not exist is
+  created with that ID, and one left out is removed with its data (the command
+  asks first unless `--force` is given).
 - `bind ims` and `bind vaults` set the connectors of each agent listed, e.g.
   `default=30,29`; `default=` removes them all. Agents not listed keep theirs.
 

@@ -275,11 +275,10 @@ async function agents(id: string, options: OutputOptions): Promise<void> {
 
 // Set what a sandbox's agents are bound to. Each kind states the wanted
 // result in full, so running the same command twice changes nothing:
-//   agents default:=104 "agent-3f9c:Research Lead=105" ":Helper="
+//   agents default:=104 "researcher:Research Lead=105"
 //       the full agent list as <agent-id>:<display name>=<model-connector-id>;
-//       an empty part means none, an empty ID is a new agent, and an agent
-//       left out is removed
-//   ims default=30,29 agent-3f9c=26     each listed agent's messaging apps
+//       an empty name or model means none, and an agent left out is removed
+//   ims default=30,29 researcher=26     each listed agent's messaging apps
 //   vaults default=2                    each listed agent's vaults
 async function bind(
   id: string,
@@ -291,20 +290,13 @@ async function bind(
   if (kind === "agents") {
     const current = (await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)).agents
     const agents = specs.map((spec) => {
-      const parts = spec.match(/^([^:=]*):(.*)=(\d*)$/)
+      const parts = spec.match(/^([^:=]+):(.*)=(\d*)$/)
       if (!parts) {
-        throw new Error(
-          `"${spec}" is not <agent-id>:<display name>=<model-connector-id>; ` +
-            "leave a part empty for none"
-        )
+        throw new Error(`"${spec}" is not <agent-id>:<display name>=<model-connector-id>`)
       }
       const [, agent, name, model] = parts
-      if (agent && !current.some((item: any) => item.id === agent)) {
-        throw new Error(`no such agent: ${agent}; leave the ID empty to add an agent`)
-      }
       return {
-        // The sandbox picks a new agent's ID.
-        id: agent || null,
+        id: agent,
         display_name: name || null,
         model_rid: model ? Number(model) : null
       }
@@ -317,9 +309,6 @@ async function bind(
     }
     data = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`, "PUT", { agents })
     await waitJob(data.reload_job_id)
-    // The IDs the sandbox gave to the agents this command added.
-    data.added = (await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)).agents
-      .filter((agent: any) => !current.some((item: any) => item.id === agent.id))
   } else if (BIND_TABLES[kind]) {
     data = await apiJson(
       `${PROVISION_API}/sandbox/${BIND_TABLES[kind]}/${id}`,
@@ -339,12 +328,7 @@ async function bind(
   } else {
     throw new Error(`kind must be one of: agents, ${Object.keys(BIND_TABLES).join(", ")}`)
   }
-  output(options, data, () => {
-    console.log(`${kind} set: ${specs.join(" ")}`)
-    for (const agent of data.added ?? []) {
-      console.log(`added agent ${agent.id} ${agent.display_name ?? ""}`.trimEnd())
-    }
-  })
+  output(options, data, () => console.log(`${kind} set: ${specs.join(" ")}`))
 }
 
 async function persona(id: string, file: string, options: AgentOptions): Promise<void> {
@@ -608,8 +592,8 @@ export function registerSandbox(program: Command): void {
     .description(
       "set what the agents are bound to; running it again changes nothing. " +
         "agents: <agent-id>:<display name>=<model-connector-id>... is the full " +
-        "agent list (default first; an empty part means none; an empty ID adds " +
-        "an agent; an agent left out is removed). " +
+        "agent list (default first; an empty name or model means none; " +
+        "an agent left out is removed). " +
         "ims|vaults: <agent-id>=<connector-id>[,<connector-id>]... per listed agent"
     )
     .option("--force", "agents: do not ask before removing an agent")

@@ -38,8 +38,8 @@ hc sandbox create <tier> <name> --recover <id> --restore-agents
 hc sandbox create <tier> <name> --detach
 hc sandbox job <job-id>
 # set the sandbox's agents as <agent-id>:<display name>=<model-connector-id>;
-# an empty ID adds an agent, and an agent left out is removed
-hc sandbox bind <id> agents default:=<connector-id> ":Research Lead=<connector-id>"
+# an agent left out is removed
+hc sandbox bind <id> agents default:=<connector-id> "researcher:Research Lead=<connector-id>"
 # set an agent's messaging apps or vaults
 hc sandbox bind <id> ims default=<connector-id>,<connector-id>
 hc sandbox bind <id> vaults default=<connector-id>
