@@ -14,7 +14,7 @@ function percent(used: number, total: number): string {
 // What the account has used and may use, one row per resource, as on the
 // console's account page.
 async function quota(options: OutputOptions): Promise<void> {
-  const [vps, trial, storage, model, sandboxes] = await Promise.all([
+  const [vps, trial, backup, model, sandboxes] = await Promise.all([
     apiJson(`${BILLING_API}/quota/vps`),
     apiJson(`${BILLING_API}/quota/vps/free-trial-usage`),
     apiJson(`${BILLING_API}/quota/storage`),
@@ -25,7 +25,7 @@ async function quota(options: OutputOptions): Promise<void> {
   const usedVpsUnits = sandboxes.items.reduce(
     (sum: number, row: any) => sum + (row.vps_unit || 1), 0
   )
-  output(options, { vps, trial, storage, model, used_vps_units: usedVpsUnits }, () => {
+  output(options, { vps, trial, backup, model, used_vps_units: usedVpsUnits }, () => {
     const rows: unknown[][] = [[
       "compute units",
       usedVpsUnits,
@@ -42,13 +42,12 @@ async function quota(options: OutputOptions): Promise<void> {
         percent(trial.trial_used_seconds, trial.monthly_trial_seconds)
       ])
     }
-    // Backups stop once the monthly backup quota is used up; the console
-    // shows it as a share only.
+    // Backups stop once the monthly backup quota is used up.
     rows.push([
-      "monthly backup quota",
-      undefined,
-      undefined,
-      percent(storage.used_s3_cents, storage.total_quota_s3_cents)
+      "monthly backup quota (USD)",
+      (backup.used_s3_cents / 100).toFixed(2),
+      (backup.total_quota_s3_cents / 100).toFixed(2),
+      percent(backup.used_s3_cents, backup.total_quota_s3_cents)
     ])
     rows.push([
       "model quota (USD)",
