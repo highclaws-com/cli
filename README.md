@@ -209,6 +209,26 @@ curl "$URL/v1/models" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+## Design rule
+
+Anything the sandbox can do for itself is done by asking its agent:
+
+```sh
+hc sandbox msg <host> "start the remote desktop"
+```
+
+Do not add a subcommand that wraps a sandbox-side API (worktrees, browser,
+remote desktop, scheduled jobs, databases, backups). The agent already knows
+those APIs, so one `msg` command covers them all, including ones added later,
+with no CLI code to maintain. Tokens are cheap; code is not.
+
+A subcommand is added only when the agent cannot do the job:
+
+- it runs on this computer: `safe-expose`, `safe-forward`, `proxy`, `expose`,
+  `sync`, and the values they need from the sandbox;
+- it acts on the platform, outside any sandbox: creating, deleting, and
+  configuring sandboxes, and listing connectors.
+
 ## Development
 
 Requires Node.js >= 18.
