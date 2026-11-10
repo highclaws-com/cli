@@ -124,14 +124,23 @@ hc sandbox timezone <id> <tz>
 `<tier>` is one of `sandbox_low_tier1`, `sandbox_medium_tier`,
 `sandbox_high_tier`. `--agent` defaults to `default`.
 
-Connectors (models, messaging apps, vaults) are created by the user in the web
-console; the CLI only lists and binds them:
+Connectors (models, messaging apps, vaults) are saved once and then bound to
+sandboxes:
 
 ```sh
 hc connector ls models|free-models|ims|vaults [--limit <n>] [--page <n>]
+hc connector new models|ims|vaults --provider <provider> --name <name> \
+  [--model <model-id>] [--key <field=value>]... [--key-file <json-file>]
+hc connector new ims --provider Weixin --name <name> --qr <file>
+hc connector rm models|ims|vaults <connector-id>
 hc sandbox bind <id> model <connector-id> [--agent <profile>]
 hc sandbox bind <id> ims|vaults [connector-id...] [--agent <profile>]
 ```
+
+`connector new` passes the credential fields through as given; a missing or
+invalid field is named in the error. `--key-file` supplies all fields from one
+JSON file. `--qr` saves a QR code image to `<file>` and waits until the user
+has scanned and confirmed it, so show that file to the user.
 
 `bind ims` and `bind vaults` replace the agent's current set with the given
 IDs; pass no ID to remove them all.

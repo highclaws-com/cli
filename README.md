@@ -15,6 +15,9 @@ hc auth logout
 hc sandbox ls
 # list saved connectors: models, free-models, ims, or vaults
 hc connector ls models
+# save or delete a connector
+hc connector new ims --provider Discord --name my-bot --key bot_token=<token>
+hc connector rm ims <connector-id>
 # create a sandbox whose default agent uses a model connector
 hc sandbox create sandbox_low_tier1 <name> --model <connector-id>
 # or return at once and check a job later
