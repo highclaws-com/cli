@@ -11,6 +11,25 @@ HighClaws CLI: A CLI tool for exposing your local machine to HighClaws sandboxes
 hc auth login
 # remove the saved credentials
 hc auth logout
+# list sandboxes; add --json to any sandbox or connector command for JSON
+hc sandbox ls
+# list saved presets: models, free-models, ims, or vaults
+hc connector ls models
+# create a sandbox whose default agent uses a model preset
+hc sandbox create sandbox_low_tier1 <name> --model <preset-id>
+# or return at once and check a job later
+hc sandbox create sandbox_low_tier1 <name> --detach
+hc sandbox job <job-id>
+# replace an agent's model, messaging apps, or vaults
+hc sandbox bind <id> ims <preset-id> <preset-id>
+# set an agent's persona, or the sandbox timezone
+hc sandbox persona <id> ./persona.txt
+hc sandbox timezone <id> Asia/Shanghai
+# rename, show usage, list agents, or delete
+hc sandbox rename <id> <new-name>
+hc sandbox usage <id>
+hc sandbox agents <id>
+hc sandbox rm <id>
 # let the sandbox reach this computer's SSH server
 hc safe-expose <endpoint>
 # reach the sandbox's private TCP service from this computer

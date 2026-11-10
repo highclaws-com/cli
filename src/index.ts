@@ -2,6 +2,7 @@
 import { Command } from "commander"
 import { registerAdmin } from "./commands/admin"
 import { registerAuth } from "./commands/auth"
+import { registerConnector } from "./commands/connector"
 import { registerExpose } from "./commands/expose"
 import { registerProxy } from "./commands/proxy"
 import { registerSandbox } from "./commands/sandbox"
@@ -14,6 +15,7 @@ program.name("hc")
 
 registerAdmin(program)
 registerAuth(program)
+registerConnector(program)
 registerExpose(program)
 registerProxy(program)
 registerSandbox(program)

@@ -4,9 +4,10 @@
 
 ## Background
 
-`hc` is driven by an agent on behalf of a non-technical user. `hc sandbox ...`
-prints the raw HighClaws JSON. `hc expose` and `hc sync` print the entrance/target
-they set up.
+`hc` is driven by an agent on behalf of a non-technical user. `hc sandbox` and
+`hc connector` commands that take `--json` print readable rows by default and
+the HighClaws API JSON with `--json`; the other `hc sandbox` commands always
+print JSON. `hc expose` and `hc sync` print the entrance/target they set up.
 
 ## Guidance
 
@@ -72,7 +73,7 @@ Credentials are saved locally, so every later command works without the user.
 List the user's sandboxes:
 
 ```sh
-hc sandbox ls [--limit <n>] [--page <n>]     # defaults: limit 10, page 0
+hc sandbox ls --json [--limit <n>] [--page <n>]     # defaults: limit 10, page 0
 ```
 
 Output is the provision API JSON. The fields needed downstream:
@@ -100,6 +101,40 @@ hc sandbox get-sync-token <host>
 
 Output: `{"status":"ok","token":"..."}`. The same token authenticates both WebDAV
 and rsync.
+
+## Sandbox management
+
+`<id>` is the `provision_id` from `hc sandbox ls`. Commands that change a
+sandbox wait until the change is applied, printing progress on stderr.
+
+```sh
+hc sandbox create <tier> <name> [--model <preset-id>] [--timezone <tz>] [--detach]
+hc sandbox job <job-id> [--wait]
+hc sandbox rm <id> --force
+hc sandbox rename <id> <new-name>
+hc sandbox usage <id>
+hc sandbox agents <id>
+hc sandbox persona <id> <file> [--agent <profile>]
+hc sandbox timezone <id> <tz>
+```
+
+`create --detach` returns at once with the job IDs to pass to `hc sandbox job`.
+`rm` asks for confirmation unless `--force` is given.
+
+`<tier>` is one of `sandbox_low_tier1`, `sandbox_medium_tier`,
+`sandbox_high_tier`. `--agent` defaults to `default`.
+
+Presets (models, messaging apps, vaults) are created by the user in the web
+console; the CLI only lists and binds them:
+
+```sh
+hc connector ls models|free-models|ims|vaults [--limit <n>] [--page <n>]
+hc sandbox bind <id> model <preset-id> [--agent <profile>]
+hc sandbox bind <id> ims|vaults [preset-id...] [--agent <profile>]
+```
+
+`bind ims` and `bind vaults` replace the agent's current set with the given
+IDs; pass no ID to remove them all.
 
 ## Sync (WebDAV mount and rsync)
 
@@ -131,7 +166,7 @@ Notes:
 
 ### Example — mount a worktree
 
-1. `hc sandbox ls` → pick the sandbox; read `ProvisionProxy_result.host`.
+1. `hc sandbox ls --json` → pick the sandbox; read `ProvisionProxy_result.host`.
 2. `hc sandbox inspect <host>` → pick a worktree from `disks.disks[].name`.
 3. `hc sandbox get-sync-token <host>` → read `token`.
 4. `hc sync --token <token> mount https://<host>/webdav/<worktree> <mountpoint>`
@@ -227,7 +262,7 @@ fails. Turn on both.
 `hc proxy` needs two inputs, which it prompts for and saves (later runs do not
 prompt):
 
-- **Endpoint** = `<upstream_ip>:<mapped_ports.wireguard>` from `hc sandbox ls`.
+- **Endpoint** = `<upstream_ip>:<mapped_ports.wireguard>` from `hc sandbox ls --json`.
   `upstream_ip` is inside `ProvisionProxy_result`, which may be a JSON string —
   parse it.
 - **Sandbox WireGuard Public Key** = `wg_local_public_key` from

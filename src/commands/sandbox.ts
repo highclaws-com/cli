@@ -1,10 +1,261 @@
+import fs from "node:fs"
+import readline from "node:readline/promises"
 import { Command } from "commander"
 import { APP_DOMAIN } from "../config"
-import { apiRequest, hostBase } from "../api"
+import { apiJson, apiRequest, hostBase } from "../api"
+import { OutputOptions, output, printPage, printRows } from "../output"
+import { DEFAULT_PAGE_SIZE } from "./connector"
 
-async function ls(limit: string, page: string): Promise<void> {
-  const url = `https://${APP_DOMAIN}/provision/api/v1/provisions?show_deleted=false&limit=${limit}&page=${page}`
-  console.log(await apiRequest(url))
+const PROVISION_API = `https://${APP_DOMAIN}/provision/api/v1`
+const JOB_POLL_MS = 2000
+
+// `hc sandbox bind <id> <kind>` -> the table in the binding route.
+const BIND_TABLES: Record<string, string> = {
+  ims: "connectors",
+  vaults: "passwords"
+}
+
+interface AgentOptions extends OutputOptions {
+  agent: string
+}
+
+// One status for the whole sandbox, from the statuses of its parts.
+function sandboxStatus(row: any): string {
+  // A sandbox without a gateway route has no ProvisionProxy record at all.
+  const parts = [row.ProvisionBkt_status, row.ProvisionVPS_status]
+  if (row.ProvisionProxy_rid !== null) parts.push(row.ProvisionProxy_status)
+  if (row.status === "deleted" || row.status === "deleting") {
+    return row.status
+  } else if (parts.includes("failure")) {
+    return "failure"
+  } else if (parts.every((status) => status === "success")) {
+    return "ready"
+  } else {
+    return "provisioning"
+  }
+}
+
+function sandboxHost(row: any): string | undefined {
+  const proxy = typeof row.ProvisionProxy_result === "string"
+    ? JSON.parse(row.ProvisionProxy_result)
+    : row.ProvisionProxy_result
+  return proxy?.host
+}
+
+// Wait for a background job, printing each new progress message on stderr.
+async function waitJob(jobId: string): Promise<void> {
+  let progress = ""
+  while (true) {
+    const job = await apiJson(`${PROVISION_API}/job/${jobId}`)
+    if (job.progress && String(job.progress) !== progress) {
+      progress = String(job.progress)
+      console.error(progress)
+    }
+    if (job.status === "finished") {
+      return
+    } else if (["failed", "stopped", "canceled"].includes(job.status)) {
+      throw new Error(job.error_message ?? job.error_code ?? `job ${jobId} ${job.status}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, JOB_POLL_MS))
+  }
+}
+
+// Print one job's current state, or follow it until it ends.
+async function job(jobId: string, options: OutputOptions & { wait?: boolean }): Promise<void> {
+  if (options.wait) await waitJob(jobId)
+  const data = await apiJson(`${PROVISION_API}/job/${jobId}`)
+  output(options, data, () => {
+    printRows(
+      ["JOB", "STATUS", "PROGRESS", "ERROR"],
+      [[data.job_id, data.status, data.progress || undefined, data.error_message]]
+    )
+  })
+}
+
+async function ls(
+  options: OutputOptions & { limit: string; page: string; deleted?: boolean }
+): Promise<void> {
+  const limit = Number(options.limit)
+  const page = Number(options.page)
+  const data = await apiJson(
+    `${PROVISION_API}/provisions` +
+      `?show_deleted=${options.deleted ? "true" : "false"}&limit=${limit}&page=${page}`
+  )
+  output(options, data, () => {
+    printRows(
+      ["ID", "NAME", "STATUS", "UNITS", "HOST", "CREATED"],
+      data.items.map((row: any) => [
+        row.provision_id,
+        row.name,
+        sandboxStatus(row),
+        row.vps_unit,
+        sandboxHost(row),
+        row.init_timestamp
+      ])
+    )
+    printPage(page, limit, data.total_records)
+  })
+}
+
+async function create(
+  tier: string,
+  name: string,
+  options: OutputOptions & { model?: string; timezone?: string; detach?: boolean }
+): Promise<void> {
+  const query = options.timezone
+    ? `?timezone=${encodeURIComponent(options.timezone)}`
+    : ""
+  const data = await apiJson(`${PROVISION_API}/job/${tier}/${name}${query}`, "POST", {
+    init_agents: [{
+      id: "default",
+      display_name: null,
+      model_rid: options.model ? Number(options.model) : null
+    }]
+  })
+  if (options.detach) {
+    output(options, data, () => {
+      console.log(`creating ${data.provision_id} ${name}`)
+      printRows(
+        ["JOB", "PART"],
+        [
+          [data.bkt_job_id, "storage"],
+          [data.vps_job_id, "machine"],
+          [data.proxy_job_id, "gateway route"]
+        ]
+      )
+    })
+  } else {
+    // Storage, then the machine, then its gateway route.
+    await waitJob(data.bkt_job_id)
+    await waitJob(data.vps_job_id)
+    await waitJob(data.proxy_job_id)
+    output(options, data, () => console.log(`created ${data.provision_id} ${name}`))
+  }
+}
+
+async function rm(id: string, options: OutputOptions & { force?: boolean }): Promise<void> {
+  if (!options.force) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stderr })
+    const answer = await rl.question(`Delete sandbox ${id}? [y/N] `)
+    rl.close()
+    if (answer.trim().toLowerCase() !== "y") throw new Error("aborted")
+  }
+  const data = await apiJson(`${PROVISION_API}/provision/${id}`, "DELETE")
+  await waitJob(data.delete_job_id)
+  output(options, data, () => console.log(`deleted ${id}`))
+}
+
+async function rename(id: string, newName: string, options: OutputOptions): Promise<void> {
+  const data = await apiJson(`${PROVISION_API}/sandbox/rename/${id}/${newName}`, "POST")
+  output(options, data, () => console.log(`renamed ${id} -> ${newName}`))
+}
+
+async function usage(
+  id: string,
+  options: OutputOptions & { minutes: string; samples: string }
+): Promise<void> {
+  const data = await apiJson(
+    `${PROVISION_API}/sandbox/usage/${id}` +
+      `?minutes=${options.minutes}&samples=${options.samples}`
+  )
+  // Disk usage is only known to the sandbox itself, which is reached by host.
+  const sandboxes = await apiJson(`${PROVISION_API}/provisions?show_deleted=false&limit=100`)
+  const row = sandboxes.items.find((row: any) => row.provision_id === id)
+  if (!row) throw new Error(`no such sandbox: ${id}`)
+  const host = sandboxHost(row)
+  if (!host) throw new Error(`sandbox ${id} has no host yet`)
+  data.disks = await apiJson(`${hostBase(host)}/mgr/api/v1/disks`)
+  output(options, data, () => {
+    const diskUsed = data.disks.disks.reduce(
+      (sum: number, disk: any) => sum + disk.usage_bytes, 0
+    )
+    const gib = (bytes?: number) => bytes == null ? undefined : (bytes / 2 ** 30).toFixed(1)
+    printRows(
+      [
+        "CPU%", "CORES", "MEM%", "MEM-USED-GIB", "MEM-TOTAL-GIB",
+        "DISK-USED-GIB", "DISK-TOTAL-GIB"
+      ],
+      [[
+        data.cpu_percent.at(-1)?.value.toFixed(1),
+        data.cpu_cores,
+        data.memory_percent.at(-1)?.value.toFixed(1),
+        gib(data.memory_used_bytes.at(-1)?.value),
+        gib(data.memory_total_bytes),
+        gib(diskUsed),
+        gib(data.disks.capacity_bytes)
+      ]]
+    )
+  })
+}
+
+async function agents(id: string, options: OutputOptions): Promise<void> {
+  const data = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)
+  output(options, data, () => {
+    printRows(
+      ["AGENT", "NAME", "MODEL-ID", "MODEL"],
+      data.agents.map((agent: any) => [
+        agent.id,
+        agent.display_name,
+        agent.model_rid,
+        agent.model?.model_id
+      ])
+    )
+  })
+}
+
+async function bind(
+  id: string,
+  kind: string,
+  presetIds: string[],
+  options: AgentOptions
+): Promise<void> {
+  const rids = presetIds.map(Number)
+  let data
+  if (kind === "model") {
+    if (rids.length !== 1) throw new Error("bind model takes exactly one preset ID")
+    // The route replaces the whole agent list, so send every agent back.
+    const current = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`)
+    if (!current.agents.some((agent: any) => agent.id === options.agent)) {
+      throw new Error(`no such agent: ${options.agent}`)
+    }
+    data = await apiJson(`${PROVISION_API}/sandbox/agents/${id}`, "PUT", {
+      agents: current.agents.map((agent: any) => ({
+        id: agent.id,
+        display_name: agent.display_name,
+        model_rid: agent.id === options.agent ? rids[0] : agent.model_rid
+      }))
+    })
+  } else if (BIND_TABLES[kind]) {
+    data = await apiJson(
+      `${PROVISION_API}/sandbox/${BIND_TABLES[kind]}/${id}`,
+      "PUT",
+      [{ profile_id: options.agent, rids }]
+    )
+  } else {
+    throw new Error(`kind must be one of: model, ${Object.keys(BIND_TABLES).join(", ")}`)
+  }
+  await waitJob(data.reload_job_id)
+  output(options, data, () => {
+    console.log(`bound ${kind} ${presetIds.join(",") || "(none)"} to ${options.agent}`)
+  })
+}
+
+async function persona(id: string, file: string, options: AgentOptions): Promise<void> {
+  const data = await apiJson(
+    `${PROVISION_API}/sandbox/persona/${id}`,
+    "PUT",
+    [{ profile_id: options.agent, prompt: fs.readFileSync(file, "utf8") }]
+  )
+  await waitJob(data.reload_job_id)
+  output(options, data, () => console.log(`persona updated for ${options.agent}`))
+}
+
+async function timezone(id: string, tz: string, options: OutputOptions): Promise<void> {
+  const data = await apiJson(`${PROVISION_API}/sandbox/timezone/${id}`, "POST", {
+    timezone: tz
+  })
+  await waitJob(data.reload_job_id)
+  output(options, data, () => console.log(`timezone set to ${tz}`))
 }
 
 async function inspect(host: string): Promise<void> {
@@ -46,14 +297,82 @@ async function egressSet(host: string, action: string, publicKey?: string): Prom
 }
 
 export function registerSandbox(program: Command): void {
-  const sandbox = program.command("sandbox").description("query HighClaws sandboxes")
+  const sandbox = program.command("sandbox").description("manage HighClaws sandboxes")
 
   sandbox
     .command("ls")
     .description("list sandboxes")
-    .option("--limit <n>", "maximum number of sandboxes to return", "10")
+    .option("--limit <n>", "maximum number of sandboxes to return", DEFAULT_PAGE_SIZE)
     .option("--page <n>", "page index", "0")
-    .action((options: { limit: string; page: string }) => ls(options.limit, options.page))
+    .option("--deleted", "include deleted sandboxes")
+    .option("--json", "print the API response JSON")
+    .action(ls)
+
+  sandbox
+    .command("create <tier> <name>")
+    .description("create a sandbox and wait until it is provisioned")
+    .option("--model <preset-id>", "model preset for the default agent")
+    .option("--timezone <tz>", "sandbox timezone, e.g. Asia/Shanghai")
+    .option("--detach", "return at once; check progress with `hc sandbox job`")
+    .option("--json", "print the API response JSON")
+    .action(create)
+
+  sandbox
+    .command("job <job-id>")
+    .description("show the progress of a background job, e.g. from `create --detach`")
+    .option("--wait", "follow the job until it ends")
+    .option("--json", "print the API response JSON")
+    .action(job)
+
+  sandbox
+    .command("rm <id>")
+    .description("delete a sandbox")
+    .option("--force", "do not ask for confirmation")
+    .option("--json", "print the API response JSON")
+    .action(rm)
+
+  sandbox
+    .command("rename <id> <new-name>")
+    .description("rename a sandbox")
+    .option("--json", "print the API response JSON")
+    .action(rename)
+
+  sandbox
+    .command("usage <id>")
+    .description("show the latest CPU, memory, and disk usage")
+    .option("--minutes <n>", "time window to sample", "1440")
+    .option("--samples <n>", "number of samples in the window", "120")
+    .option("--json", "print the API response JSON")
+    .action(usage)
+
+  sandbox
+    .command("agents <id>")
+    .description("list the agents of a sandbox")
+    .option("--json", "print the API response JSON")
+    .action(agents)
+
+  sandbox
+    .command("bind <id> <kind> [preset-ids...]")
+    .description(
+      "replace an agent's presets (kind: model|ims|vaults); " +
+        "IDs are from `hc connector ls`"
+    )
+    .option("--agent <profile>", "agent to change", "default")
+    .option("--json", "print the API response JSON")
+    .action(bind)
+
+  sandbox
+    .command("persona <id> <file>")
+    .description("set an agent's persona prompt from a text file")
+    .option("--agent <profile>", "agent to change", "default")
+    .option("--json", "print the API response JSON")
+    .action(persona)
+
+  sandbox
+    .command("timezone <id> <tz>")
+    .description("set the sandbox timezone, e.g. Asia/Shanghai")
+    .option("--json", "print the API response JSON")
+    .action(timezone)
 
   sandbox
     .command("inspect <host>")
