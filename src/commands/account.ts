@@ -24,11 +24,12 @@ async function quota(options: OutputOptions): Promise<void> {
       ["RESOURCE", "USED", "TOTAL"],
       [
         ["sandbox units", usedVpsUnits, vps.total_vps_units],
-        [
+        // Only a free-trial plan has trial hours.
+        ...(trial.monthly_trial_seconds === null ? [] : [[
           "trial hours",
           (trial.trial_used_seconds / 3600).toFixed(1),
           (trial.monthly_trial_seconds / 3600).toFixed(1)
-        ],
+        ]]),
         [
           "storage (USD)",
           (storage.used_s3_cents / 100).toFixed(2),
