@@ -23,7 +23,7 @@ interface RequestCounts {
   priority?: number
   cooling?: boolean
   retry?: number
-  // Stable CPA auth ID, set for OpenAI-compatible provider keys so their
+  // Stable CPA auth ID (set for provider keys and OAuth auth files) so
   // persisted cooldown rows can be matched against this row.
   authId?: string
   recent_requests: { success: number; failed: number }[]
@@ -331,7 +331,8 @@ function printPool(pool: string, lines: string[], coolingAuthIds: Set<string>): 
               {
                 priority: e.priority,
                 retry: e["request-retry"],
-                cooling: !(e["disable-cooling"] ?? body["disable-cooling"])
+                cooling: !(e["disable-cooling"] ?? body["disable-cooling"]),
+                authId: nativeAuthId(s, e, authIdCounts)
               }
             ])
           ),
@@ -343,14 +344,16 @@ function printPool(pool: string, lines: string[], coolingAuthIds: Set<string>): 
                 priority: g.priority,
                 retry: g["request-retry"],
                 cooling: !(g["disable-cooling"] ?? body["disable-cooling"]),
-                authId: openAICompatAuthId(g.name, g["base-url"] ?? "", e["api-key"], e["proxy-url"] ?? "", authIdCounts)
+                authId: openAICompatAuthId(g, e, authIdCounts)
               }
             ])
         )
       ])
     } else {
       const entries: [string, RequestCounts][] = endpoint === "auth-files"
-        ? body.files.map((f: RequestCounts & { name: string }) => [f.name, f])
+        ? body.files.map((f: RequestCounts & { id: string; name: string }) =>
+          [f.name, { ...f, authId: f.id }]
+        )
         : Object.entries(body as Record<string, Record<string, RequestCounts>>).flatMap(
           ([provider, keys]) => Object.entries(keys).map(([baseUrlAndKey, counts]) => {
             const key = baseUrlAndKey.split("|").pop()!
@@ -449,20 +452,40 @@ async function activeCooldownAuthIds(ctx: AdminContext, pool: string): Promise<S
   return new Set(stdout.split("\n").map((l) => l.trim()).filter((l) => l.length > 0))
 }
 
+// nativeAuthId mirrors CPA's StableIDGenerator for a config API key section,
+// e.g. "gemini-api-key" -> "gemini:apikey:<hash>". CPA also hashes the
+// prefix, headers, and connection pool of an entry, but this pool config
+// never sets them, so those parts hash empty.
+function nativeAuthId(section: string, e: KeyEntry, counts: Map<string, number>): string {
+  return stableAuthId(
+    `${section.replace(/-api-key$/, "")}:apikey`,
+    [e["api-key"], e["base-url"] ?? "", e["proxy-url"] ?? "", "", ""],
+    counts
+  )
+}
+
 // openAICompatAuthId mirrors CPA's StableIDGenerator for an
-// openai-compatibility key: kind + NUL + api key + NUL + base URL + NUL +
-// proxy URL, SHA-256, first 12 hex chars, with the duplicate suffix CPA adds.
+// openai-compatibility key: kind named after the group, hashing the api key,
+// base URL, and proxy URL.
 function openAICompatAuthId(
-  name: string,
-  baseUrl: string,
-  apiKey: string,
-  proxyUrl: string,
+  group: KeyEntry & { name: string },
+  entry: KeyEntry,
   counts: Map<string, number>
 ): string {
-  const provider = name.trim().toLowerCase() || "openai-compatibility"
-  const kind = `openai-compatibility:${provider}`
+  const provider = group.name.trim().toLowerCase() || "openai-compatibility"
+  return stableAuthId(
+    `openai-compatibility:${provider}`,
+    [entry["api-key"], group["base-url"] ?? "", entry["proxy-url"] ?? ""],
+    counts
+  )
+}
+
+// stableAuthId mirrors CPA's StableIDGenerator: kind + NUL + each trimmed
+// part, SHA-256, first 12 hex chars, with the duplicate suffix CPA adds
+// within one replica's synthesis pass.
+function stableAuthId(kind: string, parts: string[], counts: Map<string, number>): string {
   const hasher = createHash("sha256").update(kind)
-  for (const part of [apiKey, baseUrl, proxyUrl]) {
+  for (const part of parts) {
     hasher.update("\0").update(part.trim())
   }
   let short = hasher.digest("hex").slice(0, 12)
