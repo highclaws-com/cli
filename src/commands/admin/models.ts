@@ -21,11 +21,17 @@ interface RequestCounts {
   failed: number
   disabled?: boolean
   priority?: number
+  cooling?: boolean
   recent_requests: { success: number; failed: number }[]
 }
 
 // One provider key in a model pool config section.
-type KeyEntry = { "api-key": string; "base-url"?: string; priority?: number }
+type KeyEntry = {
+  "api-key": string
+  "base-url"?: string
+  "disable-cooling"?: boolean
+  priority?: number
+}
 
 export function registerModels(admin: Command, getCtx: () => AdminContext): void {
   const models = admin
@@ -248,7 +254,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
 
   models
     .command("monitor-pool-replicas")
-    .description("show each model pool credential and provider key per replica as ok/total calls and priority, missing, or disabled")
+    .description("show each model pool credential and provider key per replica with calls, priority, and effective cooling")
     .action(async () => {
       const { env, adminConfig } = getCtx()
       // the model pool management password is derived from GATEWAY_VIEWER_KEY (config.env)
@@ -273,7 +279,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       }
 
       console.log([
-        "cell: [priority] ok/total | missing | disabled",
+        "cell: [priority] [*cooling] ok/total | missing | disabled",
         "bar: 10 min/char, oldest first; . none, + ok, x fail"
       ].join("\n"))
       const lines = stdout.trim().split("\n")
@@ -288,11 +294,9 @@ function printPool(pool: string, lines: string[]): void {
   // Per credential or provider key, e.g. "command code goat user_4…rNsV"
   // (provider keys masked), the counts each replica IP holds for it.
   const rows: Record<string, Record<string, RequestCounts>> = {}
-  // Provider-key priority per replica IP, keyed "<provider>|<base url>|<api key>"
-  // like the api-key-usage rows, e.g. priorities["10.0.2.75"]["gemini||sk-e8F..."] = 12.
-  const priorities: Record<string, Record<string, number | undefined>> = {}
-  // Whether cooling is on per replica IP, e.g. cooling["10.0.2.75"] = false.
-  const cooling: Record<string, boolean> = {}
+  // Provider-key settings per replica IP, keyed "<provider>|<base url>|<api key>"
+  // like the api-key-usage rows, e.g. settings["10.0.2.75"]["gemini||sk-e8F..."].
+  const settings: Record<string, Record<string, Pick<RequestCounts, "priority" | "cooling">>> = {}
   // Config per replica IP without "api-keys", which billing pushes to each
   // replica on its own schedule, e.g. configs["10.0.2.75"] = { routing: {...}, ... }.
   const configs: Record<string, Record<string, unknown>> = {}
@@ -300,17 +304,31 @@ function printPool(pool: string, lines: string[]): void {
     const [ip, endpoint, ...json] = line.split(" ")
     const body = JSON.parse(json.join(" "))
     if (endpoint === "config") {
-      cooling[ip] = !body["disable-cooling"]
       const { "api-keys": _, ...config } = body
       configs[ip] = config
       // "<provider>-api-key" lists, e.g. "gemini-api-key" -> provider "gemini",
       // and each OpenAI-compatible group as a provider named after the group.
-      priorities[ip] = Object.fromEntries([
-        ...Object.keys(body).filter((s) => s.endsWith("-api-key")).flatMap((s) => (body[s] ?? []).map(
-          (e: KeyEntry) => [`${s.replace(/-api-key$/, "")}|${e["base-url"] ?? ""}|${e["api-key"]}`, e.priority]
-        )),
-        ...(body["openai-compatibility"] ?? []).flatMap((g: KeyEntry & { name: string; "api-key-entries": KeyEntry[] | null }) =>
-          (g["api-key-entries"] ?? []).map((e) => [`${g.name.toLowerCase()}|${g["base-url"] ?? ""}|${e["api-key"]}`, g.priority])
+      settings[ip] = Object.fromEntries([
+        ...Object.keys(body)
+          .filter((s) => s.endsWith("-api-key"))
+          .flatMap((s) =>
+            (body[s] ?? []).map((e: KeyEntry) => [
+              `${s.replace(/-api-key$/, "")}|${e["base-url"] ?? ""}|${e["api-key"]}`,
+              {
+                priority: e.priority,
+                cooling: !(e["disable-cooling"] ?? body["disable-cooling"])
+              }
+            ])
+          ),
+        ...(body["openai-compatibility"] ?? []).flatMap(
+          (g: KeyEntry & { name: string; "api-key-entries": KeyEntry[] | null }) =>
+            (g["api-key-entries"] ?? []).map((e) => [
+              `${g.name.toLowerCase()}|${g["base-url"] ?? ""}|${e["api-key"]}`,
+              {
+                priority: g.priority,
+                cooling: !(g["disable-cooling"] ?? body["disable-cooling"])
+              }
+            ])
         )
       ])
     } else {
@@ -321,7 +339,7 @@ function printPool(pool: string, lines: string[]): void {
             const key = baseUrlAndKey.split("|").pop()!
             return [
               `${provider} ${key.slice(0, 6)}…${key.slice(-4)}`,
-              { ...counts, priority: priorities[ip][`${provider}|${baseUrlAndKey}`] }
+              { ...counts, ...settings[ip][`${provider}|${baseUrlAndKey}`] }
             ]
           })
         )
@@ -330,8 +348,8 @@ function printPool(pool: string, lines: string[]): void {
       }
     }
   }
-  // Each replica answers config first, so its IP is a priorities key.
-  const ips = Object.keys(priorities)
+  // Each replica answers config first, so its IP is a settings key.
+  const ips = Object.keys(settings)
 
   const names = Object.keys(rows).sort()
   const width = Math.max(...names.map((n) => n.length)) + 2
@@ -353,16 +371,19 @@ function printPool(pool: string, lines: string[]): void {
   console.log([
     "",
     `[ ${pool} ] ${configState}`,
-    "NAME".padEnd(width) + ips.map((ip) => ip.padEnd(14)).join("") + "LAST 200 MIN",
-    "COOLING".padEnd(width) + ips.map((ip) => (cooling[ip] ? "on" : "off").padEnd(14)).join("")
+    "NAME".padEnd(width) + ips.map((ip) => ip.padEnd(20)).join("") + "LAST 200 MIN"
   ].join("\n"))
+  console.log("global_cooling".padEnd(width) + ips.map((ip) =>
+    (configs[ip]["disable-cooling"] ? "off" : "on").padEnd(20)
+  ).join(""))
   for (const name of names) {
     const cells = ips.map((ip) => {
       const c = rows[name][ip]
       const cell = !c ? "missing"
         : c.disabled ? "disabled"
-          : `${`[${c.priority ?? 0}]`.padEnd(priorityWidth)} ${c.success}/${c.success + c.failed}`
-      return cell.padEnd(14)
+          : `${`[${c.priority ?? 0}]`.padEnd(priorityWidth)} ` +
+            `${c.cooling ? "*" : " "} ${c.success}/${c.success + c.failed}`
+      return cell.padEnd(20)
     })
     const all = Object.values(rows[name])
     const bar = all[0].recent_requests.map((_, b) =>
