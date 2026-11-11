@@ -396,6 +396,11 @@ function printPool(pool: string, lines: string[], coolingAuthIds: Set<string>): 
   console.log("global_retry".padEnd(width) + ips.map((ip) =>
     String(configs[ip]["request-retry"] ?? 0).padEnd(24)
   ).join(""))
+  console.log("global_cooldown_seconds".padEnd(width) + ips.map((ip) => {
+    const raw = configs[ip]["transient-error-cooldown-seconds"]
+    const seconds = typeof raw === "number" ? raw : 0
+    return (seconds < 0 ? "off" : String(seconds === 0 ? 60 : seconds)).padEnd(24)
+  }).join(""))
   for (const name of names) {
     const cells = ips.map((ip) => {
       const c = rows[name][ip]
