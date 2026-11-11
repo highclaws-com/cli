@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import path from "node:path"
 import { Command } from "commander"
 import diff from "microdiff"
@@ -22,6 +22,10 @@ interface RequestCounts {
   disabled?: boolean
   priority?: number
   cooling?: boolean
+  retry?: number
+  // Stable CPA auth ID, set for OpenAI-compatible provider keys so their
+  // persisted cooldown rows can be matched against this row.
+  authId?: string
   recent_requests: { success: number; failed: number }[]
 }
 
@@ -29,7 +33,9 @@ interface RequestCounts {
 type KeyEntry = {
   "api-key": string
   "base-url"?: string
+  "proxy-url"?: string
   "disable-cooling"?: boolean
+  "request-retry"?: number
   priority?: number
 }
 
@@ -279,24 +285,29 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       }
 
       console.log([
-        "cell: [priority] [*cooling] ok/total | missing | disabled",
+        "cell: [priority] [*enabled|#cooling] ok/total +retry | missing | disabled",
         "bar: 10 min/char, oldest first; . none, + ok, x fail"
       ].join("\n"))
       const lines = stdout.trim().split("\n")
       for (const pool of pools) {
-        printPool(pool, lines.filter((l) => l.startsWith(`${pool} `)).map((l) => l.slice(pool.length + 1)))
+        const cooling = await activeCooldownAuthIds(getCtx(), pool)
+        printPool(
+          pool,
+          lines.filter((l) => l.startsWith(`${pool} `)).map((l) => l.slice(pool.length + 1)),
+          cooling
+        )
       }
     })
 }
 
 // Prints one pool's table from its answer lines, e.g. "10.0.2.75 config {...}".
-function printPool(pool: string, lines: string[]): void {
+function printPool(pool: string, lines: string[], coolingAuthIds: Set<string>): void {
   // Per credential or provider key, e.g. "command code goat user_4…rNsV"
   // (provider keys masked), the counts each replica IP holds for it.
   const rows: Record<string, Record<string, RequestCounts>> = {}
   // Provider-key settings per replica IP, keyed "<provider>|<base url>|<api key>"
   // like the api-key-usage rows, e.g. settings["10.0.2.75"]["gemini||sk-e8F..."].
-  const settings: Record<string, Record<string, Pick<RequestCounts, "priority" | "cooling">>> = {}
+  const settings: Record<string, Record<string, Pick<RequestCounts, "priority" | "cooling" | "retry" | "authId">>> = {}
   // Config per replica IP without "api-keys", which billing pushes to each
   // replica on its own schedule, e.g. configs["10.0.2.75"] = { routing: {...}, ... }.
   const configs: Record<string, Record<string, unknown>> = {}
@@ -306,6 +317,9 @@ function printPool(pool: string, lines: string[]): void {
     if (endpoint === "config") {
       const { "api-keys": _, ...config } = body
       configs[ip] = config
+      // CPA's StableIDGenerator counts duplicate IDs per kind+hash within one
+      // replica's synthesis pass, so mirror that separately for each replica.
+      const authIdCounts = new Map<string, number>()
       // "<provider>-api-key" lists, e.g. "gemini-api-key" -> provider "gemini",
       // and each OpenAI-compatible group as a provider named after the group.
       settings[ip] = Object.fromEntries([
@@ -316,6 +330,7 @@ function printPool(pool: string, lines: string[]): void {
               `${s.replace(/-api-key$/, "")}|${e["base-url"] ?? ""}|${e["api-key"]}`,
               {
                 priority: e.priority,
+                retry: e["request-retry"],
                 cooling: !(e["disable-cooling"] ?? body["disable-cooling"])
               }
             ])
@@ -326,7 +341,9 @@ function printPool(pool: string, lines: string[]): void {
               `${g.name.toLowerCase()}|${g["base-url"] ?? ""}|${e["api-key"]}`,
               {
                 priority: g.priority,
-                cooling: !(g["disable-cooling"] ?? body["disable-cooling"])
+                retry: g["request-retry"],
+                cooling: !(g["disable-cooling"] ?? body["disable-cooling"]),
+                authId: openAICompatAuthId(g.name, g["base-url"] ?? "", e["api-key"], e["proxy-url"] ?? "", authIdCounts)
               }
             ])
         )
@@ -371,19 +388,26 @@ function printPool(pool: string, lines: string[]): void {
   console.log([
     "",
     `[ ${pool} ] ${configState}`,
-    "NAME".padEnd(width) + ips.map((ip) => ip.padEnd(20)).join("") + "LAST 200 MIN"
+    "NAME".padEnd(width) + ips.map((ip) => ip.padEnd(24)).join("") + "LAST 200 MIN"
   ].join("\n"))
   console.log("global_cooling".padEnd(width) + ips.map((ip) =>
-    (configs[ip]["disable-cooling"] ? "off" : "on").padEnd(20)
+    (configs[ip]["disable-cooling"] ? "off" : "on").padEnd(24)
+  ).join(""))
+  console.log("global_retry".padEnd(width) + ips.map((ip) =>
+    String(configs[ip]["request-retry"] ?? 0).padEnd(24)
   ).join(""))
   for (const name of names) {
     const cells = ips.map((ip) => {
       const c = rows[name][ip]
+      const retry = c?.retry !== undefined && c.retry >= 0
+        ? c.retry
+        : configs[ip]["request-retry"] ?? 0
+      const coolingNow = c?.authId !== undefined && coolingAuthIds.has(c.authId)
       const cell = !c ? "missing"
         : c.disabled ? "disabled"
           : `${`[${c.priority ?? 0}]`.padEnd(priorityWidth)} ` +
-            `${c.cooling ? "*" : " "} ${c.success}/${c.success + c.failed}`
-      return cell.padEnd(20)
+             `${coolingNow ? "#" : c.cooling ? "*" : " "} ${c.success}/${c.success + c.failed} +${retry}`
+      return cell.padEnd(24)
     })
     const all = Object.values(rows[name])
     const bar = all[0].recent_requests.map((_, b) =>
@@ -392,4 +416,54 @@ function printPool(pool: string, lines: string[]): void {
     ).join("")
     console.log(name.padEnd(width) + cells.join("") + bar)
   }
+}
+
+// activeCooldownAuthIds returns the auth IDs with an unexpired persisted
+// cooldown for a pool, read from its PostgreSQL cooldown_store table. Returns
+// an empty set when the DB target or credentials are unavailable, or the
+// store does not exist or cannot be read.
+async function activeCooldownAuthIds(ctx: AdminContext, pool: string): Promise<Set<string>> {
+  const none = new Set<string>()
+  const target = ctx.adminConfig.db
+  if (!target || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(pool)) return none
+  const dbUser = ctx.env.DB_USER
+  const dbPass = ctx.env.DB_PASS
+  if (!dbUser || !dbPass) return none
+  const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
+  const sql = `SELECT auth_id FROM "${pool}".cooldown_store ` +
+    `WHERE NOT deleted AND (content->>'next_retry_after')::timestamptz > now();`
+  const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t ` +
+    `-d ${escapeShell(sqlLink)} -c ${escapeShell(sql)} 2>/dev/null`
+  const { code, stdout } = await runCapture("ssh", [
+    ...SSH_OPTS,
+    "-i", path.join(ctx.root, target.ssh_key),
+    `${target.ssh_usr}@${target.ip}`,
+    remote
+  ])
+  if (code !== 0) return none
+  return new Set(stdout.split("\n").map((l) => l.trim()).filter((l) => l.length > 0))
+}
+
+// openAICompatAuthId mirrors CPA's StableIDGenerator for an
+// openai-compatibility key: kind + NUL + api key + NUL + base URL + NUL +
+// proxy URL, SHA-256, first 12 hex chars, with the duplicate suffix CPA adds.
+function openAICompatAuthId(
+  name: string,
+  baseUrl: string,
+  apiKey: string,
+  proxyUrl: string,
+  counts: Map<string, number>
+): string {
+  const provider = name.trim().toLowerCase() || "openai-compatibility"
+  const kind = `openai-compatibility:${provider}`
+  const hasher = createHash("sha256").update(kind)
+  for (const part of [apiKey, baseUrl, proxyUrl]) {
+    hasher.update("\0").update(part.trim())
+  }
+  let short = hasher.digest("hex").slice(0, 12)
+  const counterKey = `${kind}:${short}`
+  const index = counts.get(counterKey) ?? 0
+  counts.set(counterKey, index + 1)
+  if (index > 0) short = `${short}-${index}`
+  return `${kind}:${short}`
 }
