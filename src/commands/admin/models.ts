@@ -90,34 +90,12 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       }
 
       if (opts.pool) {
-        // the model pool management password is derived from GATEWAY_VIEWER_KEY (config.env)
-        const [managementKey] = extractEnv(env, ["GATEWAY_VIEWER_KEY"])
-        const baseUrl = `https://model-pool.${adminConfig.domain}`
-        const keysRes = await fetch(`${baseUrl}/v0/management/api-keys`, {
-          headers: { "X-Management-Key": managementKey }
-        })
-        if (!keysRes.ok) {
-          throw new Error(`request failed: HTTP ${keysRes.status} ${keysRes.statusText}`)
+        // Public: the gateway sends this to the model_list service, which needs no key.
+        const res = await fetch(`https://model-pool.${adminConfig.domain}/v1/models`)
+        if (!res.ok) {
+          throw new Error(`request failed: HTTP ${res.status} ${res.statusText}`)
         }
-        const keysBody = await keysRes.json() as { "api-keys"?: string[] }
-        const apiKey = keysBody["api-keys"]?.[0]
-        if (!apiKey) {
-          throw new Error("model pool has no API keys configured")
-        }
-        const modelsRes = await fetch(`${baseUrl}/v1/models`, {
-          headers: { Authorization: `Bearer ${apiKey}` }
-        })
-        if (!modelsRes.ok) {
-          throw new Error(`request failed: HTTP ${modelsRes.status} ${modelsRes.statusText}`)
-        }
-        const body = await modelsRes.text()
-        let pretty = body
-        try {
-          pretty = JSON.stringify(JSON.parse(body), null, 2)
-        } catch {
-          // not JSON; display raw
-        }
-        console.log(pretty)
+        console.log(JSON.stringify(await res.json(), null, 2))
       }
 
       if (opts.allowlist) {
