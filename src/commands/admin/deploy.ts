@@ -13,6 +13,7 @@ interface DeployOptions {
   stack?: boolean
   service?: string
   secrets?: boolean
+  models?: boolean
   updateFirewall?: boolean
   pveImage?: boolean
   bindMountServices?: boolean
@@ -24,6 +25,7 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
     .command("deploy")
     .description("deployment helpers")
     .option("--secrets", "upload local secrets to every swarm node and the db node")
+    .option("--models", "upload secrets/models to every swarm node and restart the services that read it")
     .option("--remove-stack", "remove the swarm-1 stack and wait for its services")
     .option("--checkout", "update the checkout on every swarm node without deploying services")
     .option("--stack", "update the checkout on every swarm node, then deploy the swarm-1 stack on the manager")
@@ -35,7 +37,7 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
     .option("--recover-sandbox-proxies", "recreate sandbox gateway routes from the database, via an rq_api task")
     .action(async (opts: DeployOptions) => {
       if (!opts.portainer && !opts.removeStack && !opts.checkout &&
-          !opts.stack && !opts.secrets && !opts.updateFirewall && !opts.pveImage &&
+          !opts.stack && !opts.secrets && !opts.models && !opts.updateFirewall && !opts.pveImage &&
           !opts.bindMountServices && !opts.recoverSandboxProxies && !opts.service) {
         deploy.outputHelp()
         return
@@ -82,6 +84,27 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
           )
           if (rc !== 0) {
             throw new Error(`secrets upload failed for ${name} (exit ${rc})`)
+          }
+        }
+      }
+
+      if (opts.models) {
+        // Every swarm node, since the services may run on any of them.
+        for (const n of adminConfig.swarm ?? []) {
+          const nodeKey = path.join(root, n.ssh_key)
+          const dest = `${n.ssh_usr}@${n.ip}:${manager.src_path}/secrets/`
+          console.log(`[models] uploading secrets/models to ${n.ip}`)
+          const rc = await run("scp", [...SSH_OPTS, "-i", nodeKey, "-r", "secrets/models", dest], { cwd: root })
+          if (rc !== 0) {
+            throw new Error(`models upload failed for ${n.ip} (exit ${rc})`)
+          }
+        }
+        // They read the files once at startup, so restart them.
+        for (const service of ["billing", "billing_worker", "connectors"]) {
+          console.log(`[models] restarting swarm-1_${service}`)
+          const rc = await run("ssh", [...SSH_OPTS, "-i", key, at, `${docker} service update --force swarm-1_${service}`])
+          if (rc !== 0) {
+            throw new Error(`restart failed for ${service} (exit ${rc})`)
           }
         }
       }

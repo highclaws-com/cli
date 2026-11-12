@@ -76,7 +76,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       }
 
       if (opts.price) {
-        const { code, stdout } = await swarmExec(getCtx(), "billing", "cat /app/model_pricing.json")
+        const { code, stdout } = await swarmExec(getCtx(), "billing", "cat /models/pricing.json")
         if (code !== 0) {
           throw new Error(`price fetch failed (exit ${code})`)
         }
@@ -195,7 +195,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
 
   models
     .command("fetch-shared-models")
-    .description("fetch the admin (uid=1) models into secrets/<MODEL_POOL_PROVIDER>.json, then run scripts/update_models.py with it")
+    .description("fetch the admin (uid=1) models into secrets/models/<MODEL_POOL_PROVIDER>.json, then run scripts/update_models.py with it")
     .action(async () => {
       const { root, adminConfig, env } = getCtx()
       const target = adminConfig.db!
@@ -218,7 +218,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
         aliases[model.model_id.split("/").pop()] = model.key.key
       }
       // The file's base name is the provider update_models.py prices under.
-      const aliasFile = path.join(root, "secrets", `${provider}.json`)
+      const aliasFile = path.join(root, "secrets", "models", `${provider}.json`)
       fs.writeFileSync(aliasFile, JSON.stringify(aliases, null, 2) + "\n")
       console.log(`wrote ${aliasFile}`)
 
