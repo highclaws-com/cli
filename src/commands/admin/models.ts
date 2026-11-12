@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto"
+import fs from "node:fs"
 import path from "node:path"
 import { Command } from "commander"
 import diff from "microdiff"
@@ -189,6 +190,45 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       ])
       if (rc !== 0) {
         throw new Error(`models scan failed (exit ${rc})`)
+      }
+    })
+
+  models
+    .command("fetch-shared-models")
+    .description("fetch the admin (uid=1) models into secrets/<MODEL_POOL_PROVIDER>.json, then run scripts/update_models.py with it")
+    .action(async () => {
+      const { root, adminConfig, env } = getCtx()
+      const target = adminConfig.db!
+      const [dbUser, dbPass, provider] = extractEnv(env, ["DB_USER", "DB_PASS", "MODEL_POOL_PROVIDER"])
+      const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
+      // Step 1: fetch the admin models and write them as alias -> Token.
+      const sql = `SELECT json_agg(m) FROM "Models" m WHERE user_uid = 1 AND provider = '${provider}';`
+      const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t` +
+        ` -d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
+      const { code, stdout } = await runCapture("ssh", [
+        ...SSH_OPTS,
+        "-i", path.join(root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote
+      ])
+      if (code !== 0) {
+        throw new Error(`shared models query failed (exit ${code})`)
+      }
+      // e.g. model_id "<provider>/foo" with Token "openai/gpt-4o" -> "foo": "openai/gpt-4o"
+      const aliases: Record<string, string> = {}
+      for (const model of JSON.parse(stdout)) {
+        aliases[model.model_id.split("/").pop()] = model.key.key
+      }
+      // The file's base name is the provider update_models.py prices under.
+      const aliasFile = path.join(root, "secrets", `${provider}.json`)
+      fs.writeFileSync(aliasFile, JSON.stringify(aliases, null, 2) + "\n")
+      console.log(`wrote ${aliasFile}`)
+
+      // Step 2: the script also reads MODEL_TOKENS_MONTHLY_USD from env.
+      const rc = await run(
+        "python3", ["scripts/update_models.py", "--selfhost-model-alias", aliasFile],
+        { cwd: root, env }
+      )
+      if (rc !== 0) {
+        throw new Error(`scripts/update_models.py failed (exit ${rc})`)
       }
     })
 
