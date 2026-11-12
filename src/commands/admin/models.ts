@@ -35,9 +35,18 @@ type KeyEntry = {
   "api-key": string
   "base-url"?: string
   "proxy-url"?: string
+  prefix?: string
+  headers?: Record<string, string>
+  "connection-pool"?: ConnectionPool
   "disable-cooling"?: boolean
   "request-retry"?: number
   priority?: number
+}
+
+type ConnectionPool = {
+  enabled?: boolean
+  "idle-conn-timeout"?: string
+  "max-idle-conns-per-host"?: number
 }
 
 export function registerModels(admin: Command, getCtx: () => AdminContext): void {
@@ -335,9 +344,7 @@ function printPool(pool: string, lines: string[], coolingAuthIds: Set<string>): 
     if (endpoint === "config") {
       const { "api-keys": _, ...config } = body
       configs[ip] = config
-      // CPA's StableIDGenerator counts duplicate IDs per kind+hash within one
-      // replica's synthesis pass, so mirror that separately for each replica.
-      const authIdCounts = new Map<string, number>()
+      const ids = authIds(body)
       // "<provider>-api-key" lists, e.g. "gemini-api-key" -> provider "gemini",
       // and each OpenAI-compatible group as a provider named after the group.
       settings[ip] = Object.fromEntries([
@@ -350,21 +357,20 @@ function printPool(pool: string, lines: string[], coolingAuthIds: Set<string>): 
                 priority: e.priority,
                 retry: e["request-retry"],
                 cooling: !(e["disable-cooling"] ?? body["disable-cooling"]),
-                authId: nativeAuthId(s, e, authIdCounts)
+                authId: ids.get(e)
               }
             ])
           ),
-        ...(body["openai-compatibility"] ?? []).flatMap(
-          (g: KeyEntry & { name: string; "api-key-entries": KeyEntry[] | null }) =>
-            (g["api-key-entries"] ?? []).map((e) => [
-              `${g.name.toLowerCase()}|${g["base-url"] ?? ""}|${e["api-key"]}`,
-              {
-                priority: g.priority,
-                retry: g["request-retry"],
-                cooling: !(g["disable-cooling"] ?? body["disable-cooling"]),
-                authId: openAICompatAuthId(g, e, authIdCounts)
-              }
-            ])
+        ...(body["openai-compatibility"] ?? []).flatMap((g: CompatGroup) =>
+          (g["api-key-entries"] ?? []).map((e) => [
+            `${g.name.toLowerCase()}|${g["base-url"] ?? ""}|${e["api-key"]}`,
+            {
+              priority: g.priority,
+              retry: g["request-retry"],
+              cooling: !(g["disable-cooling"] ?? body["disable-cooling"]),
+              authId: ids.get(e)
+            }
+          ])
         )
       ])
     } else {
@@ -444,72 +450,93 @@ function printPool(pool: string, lines: string[], coolingAuthIds: Set<string>): 
   }
 }
 
-// activeCooldownAuthIds returns the auth IDs with an unexpired persisted
-// cooldown for a pool, read from its PostgreSQL cooldown_store table. Returns
-// an empty set when the DB target or credentials are unavailable, or the
-// store does not exist or cannot be read.
+// The auth IDs with an unexpired persisted cooldown, from the pool's
+// PostgreSQL cooldown_store. Warns and returns none if it cannot be read,
+// so the table does not silently look like nothing is cooling.
 async function activeCooldownAuthIds(ctx: AdminContext, pool: string): Promise<Set<string>> {
-  const none = new Set<string>()
-  const target = ctx.adminConfig.db
-  if (!target || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(pool)) return none
-  const dbUser = ctx.env.DB_USER
-  const dbPass = ctx.env.DB_PASS
-  if (!dbUser || !dbPass) return none
+  const target = ctx.adminConfig.db!
+  const [dbUser, dbPass] = extractEnv(ctx.env, ["DB_USER", "DB_PASS"])
   const sqlLink = `postgresql://${dbUser}:${dbPass}@${target.container}:5432/backend_db?sslmode=disable`
   const sql = `SELECT auth_id FROM "${pool}".cooldown_store ` +
     `WHERE NOT deleted AND (content->>'next_retry_after')::timestamptz > now();`
   const remote = `docker exec db_1-db-1 psql -v ON_ERROR_STOP=1 -X -q -A -t ` +
-    `-d ${escapeShell(sqlLink)} -c ${escapeShell(sql)} 2>/dev/null`
+    `-d ${escapeShell(sqlLink)} -c ${escapeShell(sql)}`
   const { code, stdout } = await runCapture("ssh", [
     ...SSH_OPTS,
-    "-i", path.join(ctx.root, target.ssh_key),
-    `${target.ssh_usr}@${target.ip}`,
-    remote
+    "-i", path.join(ctx.root, target.ssh_key), `${target.ssh_usr}@${target.ip}`, remote
   ])
-  if (code !== 0) return none
-  return new Set(stdout.split("\n").map((l) => l.trim()).filter((l) => l.length > 0))
-}
-
-// nativeAuthId mirrors CPA's StableIDGenerator for a config API key section,
-// e.g. "gemini-api-key" -> "gemini:apikey:<hash>". CPA also hashes the
-// prefix, headers, and connection pool of an entry, but this pool config
-// never sets them, so those parts hash empty.
-function nativeAuthId(section: string, e: KeyEntry, counts: Map<string, number>): string {
-  return stableAuthId(
-    `${section.replace(/-api-key$/, "")}:apikey`,
-    [e["api-key"], e["base-url"] ?? "", e["proxy-url"] ?? "", "", ""],
-    counts
-  )
-}
-
-// openAICompatAuthId mirrors CPA's StableIDGenerator for an
-// openai-compatibility key: kind named after the group, hashing the api key,
-// base URL, and proxy URL.
-function openAICompatAuthId(
-  group: KeyEntry & { name: string },
-  entry: KeyEntry,
-  counts: Map<string, number>
-): string {
-  const provider = group.name.trim().toLowerCase() || "openai-compatibility"
-  return stableAuthId(
-    `openai-compatibility:${provider}`,
-    [entry["api-key"], group["base-url"] ?? "", entry["proxy-url"] ?? ""],
-    counts
-  )
-}
-
-// stableAuthId mirrors CPA's StableIDGenerator: kind + NUL + each trimmed
-// part, SHA-256, first 12 hex chars, with the duplicate suffix CPA adds
-// within one replica's synthesis pass.
-function stableAuthId(kind: string, parts: string[], counts: Map<string, number>): string {
-  const hasher = createHash("sha256").update(kind)
-  for (const part of parts) {
-    hasher.update("\0").update(part.trim())
+  if (code !== 0) {
+    console.error(`warning: cannot read ${pool}.cooldown_store (exit ${code}); # is not shown`)
+    return new Set()
   }
-  let short = hasher.digest("hex").slice(0, 12)
-  const counterKey = `${kind}:${short}`
-  const index = counts.get(counterKey) ?? 0
-  counts.set(counterKey, index + 1)
-  if (index > 0) short = `${short}-${index}`
-  return `${kind}:${short}`
+  return new Set(stdout.split("\n").filter((l) => l))
+}
+
+type CompatGroup = KeyEntry & {
+  name: string
+  disabled?: boolean
+  "connection-pool"?: ConnectionPool
+  "api-key-entries"?: KeyEntry[] | null
+}
+
+// Each config key's auth ID, computed as CPA v8 synthesizes them: the same
+// sections in the same order, so the duplicate suffixes line up too.
+function authIds(body: Record<string, any>): Map<KeyEntry, string> {
+  const ids = new Map<KeyEntry, string>()
+  // Duplicate count per "<kind>:<hash>", e.g. a second identical key gets "-1".
+  const counts = new Map<string, number>()
+  const add = (e: KeyEntry, kind: string, parts: string[]) => {
+    const hasher = createHash("sha256").update(kind)
+    for (const part of parts) hasher.update("\0").update(part.trim())
+    const short = hasher.digest("hex").slice(0, 12)
+    const n = counts.get(`${kind}:${short}`) ?? 0
+    counts.set(`${kind}:${short}`, n + 1)
+    ids.set(e, `${kind}:${short}${n > 0 ? `-${n}` : ""}`)
+  }
+  // [config section, auth ID kind], in CPA's order.
+  const native = [
+    ["gemini-api-key", "gemini:apikey"],
+    ["interactions-api-key", "gemini-interactions:apikey"],
+    ["claude-api-key", "claude:apikey"],
+    ["codex-api-key", "codex:apikey"],
+    ["xai-api-key", "xai:apikey"],
+    ["meta-api-key", "meta:apikey"]
+  ]
+  for (const [section, kind] of native) {
+    for (const e of (body[section] ?? []) as KeyEntry[]) {
+      if (!e["api-key"]?.trim() && !e["base-url"]?.trim()) continue
+      add(e, kind, [
+        e["api-key"] ?? "", e["base-url"] ?? "", e["proxy-url"] ?? "",
+        e.prefix ?? "", sortedHeaders(e.headers), ...poolPart(e["connection-pool"])
+      ])
+    }
+  }
+  for (const g of (body["openai-compatibility"] ?? []) as CompatGroup[]) {
+    if (g.disabled) continue
+    const kind = `openai-compatibility:${g.name.trim().toLowerCase() || "openai-compatibility"}`
+    for (const e of g["api-key-entries"] ?? []) {
+      // An entry's own connection-pool fields override the group's.
+      const pool = e["connection-pool"]
+        ? { ...g["connection-pool"], ...e["connection-pool"] }
+        : g["connection-pool"]
+      add(e, kind, [e["api-key"] ?? "", g["base-url"] ?? "", e["proxy-url"] ?? "", ...poolPart(pool)])
+    }
+  }
+  for (const e of (body["vertex-api-key"] ?? []) as KeyEntry[]) {
+    add(e, "vertex:apikey", [
+      e["api-key"] ?? "", e["base-url"] ?? "", e["proxy-url"] ?? "", ...poolPart(e["connection-pool"])
+    ])
+  }
+  return ids
+}
+
+// Headers as CPA hashes them: "<key>\0<value>\0" for each, sorted by key.
+function sortedHeaders(headers?: Record<string, string>): string {
+  return Object.keys(headers ?? {}).sort().map((k) => `${k}\0${headers![k]}\0`).join("")
+}
+
+// The connection-pool hash part CPA adds only when a pool is set.
+function poolPart(pool?: ConnectionPool): string[] {
+  if (!pool) return []
+  return [`pool:${pool.enabled ?? ""}\0${(pool["idle-conn-timeout"] ?? "").trim()}\0${pool["max-idle-conns-per-host"] ?? ""}`]
 }
