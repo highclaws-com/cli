@@ -189,7 +189,7 @@ export function registerConnector(program: Command): void {
     .requiredOption("--name <name>", "name shown in lists")
     .option("--model <model-id>", "models only: the provider's model ID")
     .option("--upstream <value>", "models only: endpoint that replaces the provider's own")
-    .option("--auth-method <method>", "token or oauth_codex", "token")
+    .option("--auth-method <method>", "token, oauth_codex or oauth_xai", "token")
     .option(
       "--key <field=value>",
       "one credential field; repeat for more",
