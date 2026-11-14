@@ -18,7 +18,7 @@ export function registerInvite(admin: Command, getCtx: () => AdminContext): void
     .description("generate an invite code through the swarm manager")
     .option("--max_uses <count>", "maximum number of redemptions", "1")
     .option("--expiry_hours <hours>", "hours until expiration; 0 disables expiry", "42")
-    .option("--trial_hours_addition <hours>", "trial hours granted on redemption", "48")
+    .option("--trial_hours_addition <hours>", "free trial hours granted on redemption", "48")
     .option(
       "--model_quota_dollars_addition <amount>",
       "model usage quota granted on redemption, in dollars",

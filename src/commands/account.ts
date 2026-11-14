@@ -111,7 +111,7 @@ async function quota(options: OutputOptions): Promise<void> {
     // moment the trial starts, whether or not a sandbox is in use.
     if (trial.monthly_trial_seconds != null) {
       rows.push([
-        trial.month_trial_started_at ? "trial hours elapsed" : "trial hours (not started)",
+        trial.month_trial_started_at ? "free trial hours elapsed" : "free trial hours (not started)",
         (trial.trial_used_seconds / 3600).toFixed(1),
         (trial.monthly_trial_seconds / 3600).toFixed(1),
         percent(trial.trial_used_seconds, trial.monthly_trial_seconds)
@@ -165,7 +165,7 @@ async function plan(options: OutputOptions): Promise<void> {
     const name = (data.intended_plan ?? data.plan)?.name
     const creditCents = Math.max(0, -(data.subscription?.paygate_balance_cents || 0))
     printRows(
-      ["PLAN", "STATUS", "COMPUTE-UNITS", "TRIAL-HOURS/MONTH", "CREDIT-USD", "CYCLE-END"],
+      ["PLAN", "STATUS", "COMPUTE-UNITS", "FREE-TRIAL-HOURS/MONTH", "CREDIT-USD", "CYCLE-END"],
       [[
         name ? humanize(name) : "No active plan",
         planStatus(data),
@@ -178,7 +178,7 @@ async function plan(options: OutputOptions): Promise<void> {
   })
 }
 
-// Redeem an invite code for trial hours and model quota.
+// Redeem an invite code for free trial hours and model quota.
 async function redeem(
   code: string,
   options: OutputOptions & { force?: boolean }
@@ -196,7 +196,7 @@ async function redeem(
   })
   output(options, data, () => {
     console.log(
-      `redeemed: ${data.bonus.trial_hours_addition ?? 0} extra trial hours, ` +
+      `redeemed: ${data.bonus.trial_hours_addition ?? 0} extra free trial hours, ` +
         `$${data.bonus.model_quota_dollars_addition ?? 0} extra model quota`
     )
   })
@@ -219,7 +219,7 @@ export function registerAccount(program: Command): void {
 
   account
     .command("redeem <code>")
-    .description("redeem an invite code for trial hours and model quota")
+    .description("redeem an invite code for free trial hours and model quota")
     .option("--force", "do not ask for confirmation")
     .option("--json", "print the API response JSON")
     .action(redeem)
