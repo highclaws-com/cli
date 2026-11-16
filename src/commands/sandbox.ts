@@ -410,8 +410,9 @@ async function getSyncToken(host: string): Promise<void> {
 }
 
 // Print the value that `hc safe-expose` and `hc safe-forward` take: the
-// sandbox's tunnel address and credentials as base64url JSON.
-async function getEndpoint(id: string): Promise<void> {
+// sandbox's tunnel address and the client's credentials as base64url JSON.
+// The client is added if new.
+async function getEndpoint(id: string, clientName: string): Promise<void> {
   const row = await findSandbox(id)
   // Tunnel data is an object, e.g. {server, destination, uuid, ...}.
   if (typeof row.mapped_ports?.reverse_ssh !== "object" || !row.mapped_ports.reverse_ssh) {
@@ -419,11 +420,34 @@ async function getEndpoint(id: string): Promise<void> {
       `sandbox ${id} has no endpoint; only sandboxes created with the tunnel have one`
     )
   }
-  const keys = await apiJson(`${hostBase(sandboxHost(row)!)}/mgr/api/v1/ssh/key`)
+  const keys = await apiJson(
+    `${hostBase(sandboxHost(row)!)}/mgr/api/v1/ssh/clients`, "POST", { name: clientName }
+  )
   console.log(Buffer.from(JSON.stringify({
     ...row.mapped_ports.reverse_ssh,
     ...keys.key
   })).toString("base64url"))
+}
+
+async function lsClients(id: string, options: OutputOptions): Promise<void> {
+  const row = await findSandbox(id)
+  const data = await apiJson(`${hostBase(sandboxHost(row)!)}/mgr/api/v1/ssh/clients`)
+  output(options, data, () => printRows(
+    ["CLIENT", "PORT", "CONNECTED"],
+    data.clients.map((c: any) => [c.name, c.port, c.connected ? "yes" : "no"])
+  ))
+}
+
+async function rmClient(id: string, clientName: string, options: { force?: boolean }): Promise<void> {
+  if (!options.force) {
+    await confirm(`Remove client ${clientName}? The other clients will have to reconnect.`)
+  }
+  const row = await findSandbox(id)
+  await apiJson(
+    `${hostBase(sandboxHost(row)!)}/mgr/api/v1/ssh/clients/${encodeURIComponent(clientName)}`,
+    "DELETE"
+  )
+  console.log(`removed client ${clientName}`)
 }
 
 // Show when the sandbox's files were last backed up, start a backup now, or
@@ -691,9 +715,21 @@ Each item is <agent-id>:<display name>=<id>,<id>. Other agents are left as they 
     .action(getSyncToken)
 
   sandbox
-    .command("get-endpoint <id>")
-    .description("print the endpoint for `hc safe-expose` and `hc safe-forward`")
+    .command("get-endpoint <id> <name>")
+    .description("print the endpoint for `hc safe-expose` and `hc safe-forward`; the client <name>, e.g. laptop, is added if new")
     .action(getEndpoint)
+
+  sandbox
+    .command("ls-clients <id>")
+    .description("list the clients connected with `hc safe-expose`")
+    .option("--json", "print the API response JSON")
+    .action(lsClients)
+
+  sandbox
+    .command("rm-client <id> <name>")
+    .description("revoke a client's key; the other clients must reconnect")
+    .option("--force", "do not ask for confirmation")
+    .action(rmClient)
 
   sandbox
     .command("msg <host> <message>")

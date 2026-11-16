@@ -23,9 +23,9 @@ export function tunnelValue(decoded: any, port: number): string {
   })).toString("base64url")
 }
 
-// Reverse-forwards the sandbox's 127.0.0.1:2222 to this computer's sshd on
-// port 22. The endpoint decodes to JSON with the sandbox's SSH client key
-// ("key") and host key ("host_key").
+// Reverse-forwards the sandbox's 127.0.0.1:<port> to this computer's sshd on
+// port 22. The endpoint decodes to JSON with the client's SSH key ("key"),
+// the sandbox host key ("host_key"), and the client's sandbox port ("port").
 async function safeExpose(endpoint: string | undefined): Promise<void> {
   endpoint = endpoint ?? getUserConfig("reverse_ssh")?.endpoint
   if (!endpoint) throw new Error("no saved endpoint; pass <endpoint> once")
@@ -72,9 +72,9 @@ async function safeExpose(endpoint: string | undefined): Promise<void> {
     "-o", `UserKnownHostsFile="${knownHostsFile.split(path.sep).join("/")}"`,
     "-o", "StrictHostKeyChecking=yes",
     "-o", `ProxyCommand=${quotedHelper.replace(/%/g, "%%")} ssh-tunnel ${proxyValue}`,
-    "-R", "127.0.0.1:2222:127.0.0.1:22",
+    "-R", `127.0.0.1:${decoded.port}:127.0.0.1:22`,
     "-i", keyFile,
-    "tunnel@sandbox"
+    `tunnel${decoded.port}@sandbox`
   ], { stdio: ["inherit", "inherit", "pipe"] })
   const save = () => {
     updateUserConfig("reverse_ssh", { endpoint })
