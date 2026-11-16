@@ -26,7 +26,7 @@ hc connector ls models
 # list the providers of a kind and the fields each one takes
 hc connector schema ims
 # save or delete a connector
-hc connector new ims --provider Discord --name my-bot --key bot_token=<token>
+hc connector new ims --provider Discord --name my-bot --key bot_token
 hc connector rm ims <connector-id>
 # create a sandbox whose default agent uses a model connector
 hc sandbox create <tier> <name> --model <connector-id>
@@ -62,7 +62,7 @@ hc sandbox file-backup <host> --list /
 # restart the sandbox agent when it stops answering
 hc sandbox restart <host>
 # let the sandbox reach this computer's SSH server
-hc safe-expose <endpoint>
+hc safe-expose
 # reach the sandbox's private TCP service from this computer
 hc safe-forward 1080
 # route sandbox browser egress through this computer
@@ -73,13 +73,16 @@ hc expose tcp:43817
 hc expose http:8000
 # expose a local HTTPS service through Cloudflare
 hc expose https:8443
-# save a default sync token so later commands do not need --token
-hc sync --token <token>
 # mount a sandbox WebDAV tree
-hc sync --token <token> mount https://<host>/webdav/<worktree> ./dir
+hc sync mount https://<host>/webdav/<worktree> ./dir
 # sync files with rsync
-hc sync --token <token> rsync -ar rsync://rsync@<host>:<port>/data/<worktree> ./dir
+hc sync rsync -ar rsync://rsync@<host>:<port>/data/<worktree> ./dir
+# replace the saved sync token
+hc sync --token
 ```
+
+Secrets (the endpoint, the sync token, connector keys) are asked for, not
+passed as arguments; see Secret values in [AGENTS.md](AGENTS.md).
 
 ## Windows setup
 
@@ -109,13 +112,13 @@ Let the sandbox reach this computer's SSH server (port 22). Enable an SSH
 server on the target first; see the Linux, macOS, and Windows sections below.
 
 ```sh
-hc safe-expose ENDPOINT
+hc safe-expose
 ```
 
-`ENDPOINT` is the value shown in the sandbox console, also printed by
-`hc sandbox get-endpoint <id> <name>`, where `<name>` names this computer,
-e.g. `laptop`. Each computer needs its own name. It is saved after a
-successful connection. Press Ctrl+C to stop.
+It asks for `ENDPOINT`, the value shown in the sandbox console, also
+printed by `hc sandbox get-endpoint <id> <name>`, where `<name>` names this
+computer, e.g. `laptop`. Each computer needs its own name. It is saved after a
+successful connection; `--reset` asks again. Press Ctrl+C to stop.
 
 Ask the sandbox agent to SSH to this computer.
 

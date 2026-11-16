@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process"
 import { Command } from "commander"
 import { getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
+import { askSecrets } from "../output"
 import {
   DEFAULT_RCLONE_VERSION,
   DEFAULT_VFS_CACHE_MODE,
@@ -45,27 +46,27 @@ function rsyncHost(args: string[]): string | undefined {
   return undefined
 }
 
-// The token store is keyed by WebDAV origin or rsync host:port.
-function syncToken(address: string | undefined, explicitToken?: string): string {
+// The token store is keyed by WebDAV origin or rsync host:port. The token is
+// asked for and saved when `ask` is set or none is saved.
+async function syncToken(address: string | undefined, ask?: boolean): Promise<string> {
   // No address uses the "default" key.
   const key = address ?? "default"
   const tokens = getUserConfig("sync_token") ?? {}
-  if (explicitToken) {
-    updateUserConfig("sync_token", { ...tokens, [key]: explicitToken })
-    return explicitToken
-  }
   // An address with no saved token uses the default token.
-  const token = tokens[key] ?? tokens.default
+  let token = ask ? undefined : tokens[key] ?? tokens.default
   if (!token) {
-    throw new Error("sync token is required: provide --token <token>")
+    [token] = await askSecrets(["Sync token"])
+    updateUserConfig("sync_token", { ...tokens, [key]: token })
   }
   return token
 }
 
 async function obscure(executable: string, token: string): Promise<string> {
-  const result = spawnSync(executable, ["obscure", token], {
+  // "-" reads the token from stdin, keeping it out of the process list.
+  const result = spawnSync(executable, ["obscure", "-"], {
+    input: token,
     encoding: "utf8",
-    stdio: ["ignore", "pipe", "inherit"],
+    stdio: ["pipe", "pipe", "inherit"],
     windowsHide: true
   })
   if (result.status !== 0) {
@@ -97,12 +98,12 @@ async function mount(
   mountpoint: string,
   version: string,
   cacheMode: string,
-  explicitToken?: string
+  ask?: boolean
 ): Promise<void> {
   const executable = await ensureRclone(version)
   const parsed = webdavRemote(address)
   if (!parsed) throw new Error(`invalid sandbox address: ${address}`)
-  const token = syncToken(parsed.tokenAddress, explicitToken)
+  const token = await syncToken(parsed.tokenAddress, ask)
   const pass = await obscure(executable, token)
 
   console.log(`WebDAV URL: ${parsed.webdavURL}`)
@@ -138,12 +139,12 @@ async function mount(
   if (code !== 0) throw new Error(`rclone exited with code ${code}`)
 }
 
-async function rsync(args: string[], explicitToken?: string): Promise<void> {
+async function rsync(args: string[], ask?: boolean): Promise<void> {
   if (args.length === 0) {
     throw new Error("rsync arguments are required")
   }
   const executable = await ensureRsync()
-  const token = syncToken(rsyncHost(args), explicitToken)
+  const token = await syncToken(rsyncHost(args), ask)
   const finalArgs = process.platform === "win32" ? cygwinArgs(args) : args
   console.log(`$ rsync ${finalArgs.join(" ")}\n`)
   const code = await run(executable, finalArgs, { env: { RSYNC_PASSWORD: token } })
@@ -154,11 +155,11 @@ export function registerSync(program: Command): void {
   const sync = program
     .command("sync")
     .description("sync files with a sandbox worktree")
-    .option("--token <token>", "sync token; saved to config once specified")
+    .option("--token", "ask for the sync token and save it, replacing the saved one")
     .option("--rclone-version <version>", "rclone release tag", DEFAULT_RCLONE_VERSION)
-    .action((options: { token?: string }) => {
+    .action(async (options: { token?: boolean }) => {
       if (options.token) {
-        syncToken("default", options.token)
+        await syncToken("default", true)
         console.log("Default sync token saved.")
       } else {
         sync.help()
@@ -175,7 +176,7 @@ export function registerSync(program: Command): void {
     )
     .action((address: string, mountpoint: string, _options: unknown, cmd: Command) => {
       const opts = cmd.optsWithGlobals() as {
-        token?: string
+        token?: boolean
         rcloneVersion: string
         vfsCacheMode: string
       }
@@ -187,7 +188,7 @@ export function registerSync(program: Command): void {
     .description("run rsync against the sandbox with the synced token")
     .allowUnknownOption()
     .action((args: string[], _options: unknown, cmd: Command) => {
-      const opts = cmd.optsWithGlobals() as { token?: string }
+      const opts = cmd.optsWithGlobals() as { token?: boolean }
       return rsync(args, opts.token)
     })
 }

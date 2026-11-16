@@ -2,7 +2,15 @@ import fs from "node:fs"
 import { Command } from "commander"
 import { APP_DOMAIN } from "../config"
 import { apiFetch, apiJson } from "../api"
-import { OutputOptions, checkPage, output, pageNumber, printPage, printRows } from "../output"
+import {
+  OutputOptions,
+  askSecrets,
+  checkPage,
+  output,
+  pageNumber,
+  printPage,
+  printRows
+} from "../output"
 
 const CONNECTORS_API = `https://${APP_DOMAIN}/connectors/api/v1`
 const CONNECTORS_SCHEMA = `https://${APP_DOMAIN}/connectors/public/schema`
@@ -64,11 +72,9 @@ async function create(kind: string, options: NewOptions): Promise<void> {
   } else if (options.keyFile) {
     key = JSON.parse(fs.readFileSync(options.keyFile, "utf8"))
   } else {
-    // "bot_token=abc=d" -> ["bot_token", "abc=d"]
-    key = Object.fromEntries(options.key.map((pair) => {
-      const at = pair.indexOf("=")
-      return [pair.slice(0, at), pair.slice(at + 1)]
-    }))
+    // `--key bot_token` asks "bot_token: " -> {bot_token: "<typed value>"}
+    const values = await askSecrets(options.key)
+    key = Object.fromEntries(options.key.map((field, i) => [field, values[i]]))
   }
   const data = await apiJson(`${CONNECTORS_API}/${route}`, "POST", {
     name: options.name,
@@ -191,9 +197,9 @@ export function registerConnector(program: Command): void {
     .option("--upstream <value>", "models only: endpoint that replaces the provider's own")
     .option("--auth-method <method>", "token, oauth_codex or oauth_xai", "token")
     .option(
-      "--key <field=value>",
-      "one credential field; repeat for more",
-      (pair: string, pairs: string[]) => [...pairs, pair],
+      "--key <field>",
+      "one credential field, whose value is asked for; repeat for more",
+      (field: string, fields: string[]) => [...fields, field],
       []
     )
     .option("--key-file <file>", "JSON file holding all credential fields")

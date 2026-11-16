@@ -68,6 +68,16 @@ Credentials are saved locally, so every later command works without the user.
 
 `hc auth logout` removes the saved credentials.
 
+## Secret values
+
+A secret is never a command argument, where the process list and shell
+history would show it. The command asks for it and does not echo what is
+typed. To supply it without a terminal, send it on stdin, one value per line:
+
+```sh
+hc sandbox get-endpoint <id> laptop | hc safe-expose
+```
+
 ## Sandbox discovery
 
 List the user's sandboxes:
@@ -143,7 +153,7 @@ sandboxes:
 hc connector ls models|free-models|ims|vaults [--limit <n>] [--page <n>]
 hc connector schema models|ims|vaults
 hc connector new models|ims|vaults --provider <provider> --name <name> \
-  [--model <model-id>] [--key <field=value>]... [--key-file <json-file>]
+  [--model <model-id>] [--key <field>]... [--key-file <json-file>]
 hc connector new ims --provider Weixin --name <name> --qr <file>
 hc connector rm models|ims|vaults <connector-id>
 hc sandbox bind <id> agents|ims|vaults <agent-id>:<display name>=<id>,<id>
@@ -153,7 +163,8 @@ hc sandbox unbind <id> agents|ims|vaults <agent-id> [--force]
 `connector schema` lists what the server accepts: each provider, its
 `--auth-method`, and its fields with required ones starred. FIELDS map to
 options (`model_id` is `--model`, `upstream_overwrite` is `--upstream`);
-KEY-FIELDS are given with `--key`. Add `--json` for each field's pattern.
+each of the KEY-FIELDS is named with `--key`, and its value is asked for as
+in Secret values, in the order named. Add `--json` for each field's pattern.
 `connector new` passes the fields through as given; a missing or invalid field
 is named in the error. `--key-file` supplies all fields from one
 JSON file. `--qr` saves a QR code image to `<file>` and waits until the user
@@ -221,21 +232,23 @@ on macOS); see [README.md](README.md) (Windows setup / macOS setup).
 Mount a worktree over WebDAV (via rclone):
 
 ```sh
-hc sync --token <token> mount https://<host>/webdav/<worktree> <mountpoint>
+hc sync mount https://<host>/webdav/<worktree> <mountpoint>
 ```
 
 rsync a worktree:
 
 ```sh
-hc sync --token <token> rsync -ar \
+hc sync rsync -ar \
   rsync://rsync@<upstream_ip>:<mapped_ports.rsync>/data/<worktree> <local-dir>
 ```
 
 Notes:
 
-- `<token>` is the `token` from `hc sandbox get-sync-token`.
-- To stop repeating `--token`, save it once as the default:
-  `hc sync --token <token>` (no subcommand). Later `mount`/`rsync` reuse it.
+- Both ask for the sync token, the `token` from `hc sandbox get-sync-token`,
+  as in Secret values, and save it for that sandbox; later runs do not ask.
+- `hc sync --token mount ...` and `hc sync --token rsync ...` ask again and
+  replace the saved token. `hc sync --token` (no subcommand) saves the token
+  used for a sandbox that has none saved.
 - `mount` runs in the foreground; Ctrl+C unmounts.
 - Mounts cache reads by default (`--vfs-cache-mode full`, cache under
   `<user-cache>/highclaws/rclone/cache`); override with
@@ -246,7 +259,8 @@ Notes:
 1. `hc sandbox ls --json` → pick the sandbox; read `ProvisionProxy_result.host`.
 2. `hc sandbox inspect <host>` → pick a worktree from `disks.disks[].name`.
 3. `hc sandbox get-sync-token <host>` → read `token`.
-4. `hc sync --token <token> mount https://<host>/webdav/<worktree> <mountpoint>`
+4. `hc sync mount https://<host>/webdav/<worktree> <mountpoint>` → give it
+   that token when asked.
 
 ## Expose a local service
 
@@ -283,11 +297,11 @@ Ctrl+C stops it.
 `ENDPOINT` is printed by `hc sandbox get-endpoint <id> <name>` (`<id>` is the
 `provision_id` from `hc sandbox ls`; `<name>` names this computer, e.g.
 `laptop`, and is added if new); it is a secret. Each computer needs its own
-name. It is saved after the first successful connection, so later runs need
-no argument. It runs in the foreground; Ctrl+C stops it.
+name. It is asked for as in Secret values and saved after the first
+successful connection, so later runs do not ask; `--reset` asks again. It
+runs in the foreground; Ctrl+C stops it.
 
 ```sh
-hc safe-expose ENDPOINT
 hc safe-expose
 ```
 
@@ -301,11 +315,10 @@ hc sandbox rm-client <id> <name>
 
 `hc safe-forward` goes the other way: it forwards a local port to the TCP
 service the cloud agent runs on the sandbox's private port, whatever protocol
-it speaks. `ENDPOINT` is the same value; it is saved when passed, so later
-runs need no argument. It runs in the foreground; Ctrl+C stops it.
+it speaks. It asks for the same `ENDPOINT` unless one is saved, and saves
+it; `--reset` asks again. It runs in the foreground; Ctrl+C stops it.
 
 ```sh
-hc safe-forward 1080 ENDPOINT
 hc safe-forward 1080
 ```
 

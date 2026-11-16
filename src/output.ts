@@ -1,4 +1,5 @@
 import readline from "node:readline/promises"
+import { Writable } from "node:stream"
 
 export interface OutputOptions {
   json?: boolean
@@ -28,6 +29,29 @@ export async function confirm(question: string): Promise<void> {
   const answer = await rl.question(`${question} [y/N] `)
   rl.close()
   if (answer.trim().toLowerCase() !== "y") throw new Error("aborted")
+}
+
+// Ask for each label's value without echoing what is typed, so a secret
+// stays out of the process list and shell history. Piped stdin supplies one
+// value per line.
+export async function askSecrets(labels: string[]): Promise<string[]> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    // readline echoes typed keys to its output; discard them.
+    output: new Writable({ write: (_chunk, _encoding, done) => done() }),
+    terminal: process.stdin.isTTY
+  })
+  const lines = rl[Symbol.asyncIterator]()
+  const values: string[] = []
+  for (const label of labels) {
+    process.stderr.write(`${label}: `)
+    const line = await lines.next()
+    process.stderr.write("\n")
+    if (line.done) throw new Error(`${label} is required`)
+    values.push(line.value.trim())
+  }
+  rl.close()
+  return values
 }
 
 // With --json print the API response as-is, otherwise the readable form.

@@ -5,6 +5,7 @@ import path from "node:path"
 import { Command } from "commander"
 import { USER_CACHE_DIR, USER_CONFIG_PATH, getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
+import { askSecrets } from "../output"
 import { ensureProxyHelper } from "../proxy-helper"
 
 // Sandbox TCP port of the SSH server that accepts the reverse forward.
@@ -26,9 +27,9 @@ export function tunnelValue(decoded: any, port: number): string {
 // Reverse-forwards the sandbox's 127.0.0.1:<port> to this computer's sshd on
 // port 22. The endpoint decodes to JSON with the client's SSH key ("key"),
 // the sandbox host key ("host_key"), and the client's sandbox port ("port").
-async function safeExpose(endpoint: string | undefined): Promise<void> {
-  endpoint = endpoint ?? getUserConfig("reverse_ssh")?.endpoint
-  if (!endpoint) throw new Error("no saved endpoint; pass <endpoint> once")
+async function safeExpose(options: { reset?: boolean }): Promise<void> {
+  const saved = options.reset ? undefined : getUserConfig("reverse_ssh")?.endpoint
+  const endpoint = saved ?? (await askSecrets(["Endpoint"]))[0]
   const helper = await ensureProxyHelper(false)
   const helperPath = helper.split(path.sep).join("/")
   const quotedHelper = process.platform === "win32"
@@ -36,7 +37,8 @@ async function safeExpose(endpoint: string | undefined): Promise<void> {
     : `'${helperPath.replace(/'/g, "'\\''")}'`
   const decoded = JSON.parse(Buffer.from(endpoint, "base64url").toString("utf8"))
   // Re-encode transport fields so ProxyCommand receives no shell syntax or SSH keys.
-  const proxyValue = tunnelValue(decoded, REVERSE_SSH_PORT)
+  // ssh passes its environment to ProxyCommand, keeping the value out of argv.
+  const TUNNEL = tunnelValue(decoded, REVERSE_SSH_PORT)
   const dir = path.join(USER_CACHE_DIR, "safe-expose")
   const keyFile = path.join(dir, "key")
   const knownHostsFile = path.join(dir, "known_hosts")
@@ -71,11 +73,11 @@ async function safeExpose(endpoint: string | undefined): Promise<void> {
     "-o", "HostKeyAlias=sandbox",
     "-o", `UserKnownHostsFile="${knownHostsFile.split(path.sep).join("/")}"`,
     "-o", "StrictHostKeyChecking=yes",
-    "-o", `ProxyCommand=${quotedHelper.replace(/%/g, "%%")} ssh-tunnel ${proxyValue}`,
+    "-o", `ProxyCommand=${quotedHelper.replace(/%/g, "%%")} ssh-tunnel`,
     "-R", `127.0.0.1:${decoded.port}:127.0.0.1:22`,
     "-i", keyFile,
     `tunnel${decoded.port}@sandbox`
-  ], { stdio: ["inherit", "inherit", "pipe"] })
+  ], { stdio: ["inherit", "inherit", "pipe"], env: { ...process.env, TUNNEL } })
   const save = () => {
     updateUserConfig("reverse_ssh", { endpoint })
     console.error(`Saved endpoint to ${USER_CONFIG_PATH}`)
@@ -105,7 +107,8 @@ async function safeExpose(endpoint: string | undefined): Promise<void> {
 
 export function registerSafeExpose(program: Command): void {
   program
-    .command("safe-expose [endpoint]")
+    .command("safe-expose")
     .description("let the sandbox reach this computer's SSH server (port 22)")
+    .option("--reset", "ask for a new endpoint instead of the saved one")
     .action(safeExpose)
 }

@@ -1,6 +1,7 @@
 import { Command } from "commander"
 import { USER_CONFIG_PATH, getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
+import { askSecrets } from "../output"
 import { ensureProxyHelper } from "../proxy-helper"
 import { tunnelValue } from "./safe-expose"
 
@@ -11,14 +12,13 @@ const FORWARD_TCP_PORT = 2023
 // FORWARD_TCP_PORT, whatever protocol the service there speaks.
 async function safeForward(
   port: string,
-  endpoint: string | undefined
+  options: { reset?: boolean }
 ): Promise<void> {
-  if (endpoint) {
+  let endpoint = options.reset ? undefined : getUserConfig("reverse_ssh")?.endpoint
+  if (!endpoint) {
+    endpoint = (await askSecrets(["Endpoint"]))[0]
     updateUserConfig("reverse_ssh", { endpoint })
     console.error(`Saved endpoint to ${USER_CONFIG_PATH}`)
-  } else {
-    endpoint = getUserConfig("reverse_ssh")?.endpoint
-    if (!endpoint) throw new Error("no saved endpoint; pass <endpoint> once")
   }
   const decoded = JSON.parse(
     Buffer.from(endpoint, "base64url").toString("utf8")
@@ -29,16 +29,18 @@ async function safeForward(
   )
   const code = await run(
     helper,
-    ["forward", port, tunnelValue(decoded, FORWARD_TCP_PORT)]
+    ["forward", port],
+    { env: { TUNNEL: tunnelValue(decoded, FORWARD_TCP_PORT) } }
   )
   if (code !== 0) throw new Error(`proxy helper exited with code ${code}`)
 }
 
 export function registerSafeForward(program: Command): void {
   program
-    .command("safe-forward <port> [endpoint]")
+    .command("safe-forward <port>")
     .description(
       `forward a local TCP port to the sandbox's port ${FORWARD_TCP_PORT}`
     )
+    .option("--reset", "ask for a new endpoint instead of the saved one")
     .action(safeForward)
 }

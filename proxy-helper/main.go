@@ -41,8 +41,8 @@ func main() {
 			"usage: hc-proxy " +
 				"keygen|" +
 				"serve|" +
-				"ssh-tunnel <tunnel>|" +
-				"forward <port> <tunnel>",
+				"ssh-tunnel|" +
+				"forward <port> (tunnel value in $TUNNEL)",
 		)
 	}
 
@@ -51,10 +51,10 @@ func main() {
 		err = generateKeypair()
 	} else if os.Args[1] == "serve" {
 		err = serve()
-	} else if os.Args[1] == "ssh-tunnel" && len(os.Args) == 3 {
-		err = sshTunnel(os.Args[2])
-	} else if os.Args[1] == "forward" && len(os.Args) == 4 {
-		err = forward(os.Args[2], os.Args[3])
+	} else if os.Args[1] == "ssh-tunnel" && len(os.Args) == 2 {
+		err = sshTunnel(os.Getenv("TUNNEL"))
+	} else if os.Args[1] == "forward" && len(os.Args) == 3 {
+		err = forward(os.Args[2], os.Getenv("TUNNEL"))
 	} else {
 		err = fmt.Errorf("unknown command %q", os.Args[1])
 	}
