@@ -361,8 +361,7 @@ sshpass -e ssh \
 
 Running `hc proxy` gives the cloud-side agent browser a SOCKS5 egress through the
 machine running it, changing that browser's public IP to that machine's so it
-better matches sites' geographic fingerprint expectations. It prints a **Client
-WireGuard Public Key** and then runs in the foreground — keep it running.
+better matches sites' geographic fingerprint expectations.
 
 Egress needs two independent states **both** on:
 
@@ -378,44 +377,21 @@ fails. Turn on both.
 
 ### Enable
 
-`hc proxy` needs two inputs, and saves them (later runs do not ask):
-
-- **Endpoint**, given with `--endpoint`:
-  `hc sandbox inspect <id> | jq -r '.provision | "\(.ProvisionProxy_result.upstream_ip):\(.mapped_ports.wireguard)"'`
-- **Sandbox WireGuard Public Key**, given with `--sandbox-key`:
-  `hc sandbox egress get <host> | jq -r .wg_local_public_key`
-
-Each option replaces the saved value; a value with neither is asked for.
-
-Start the proxy first — it prints the **Client WireGuard Public Key** and then
-blocks in the foreground, so run it in a terminal (or background it) and keep it
-running:
-
 ```sh
-hc proxy --endpoint "$ENDPOINT" --sandbox-key "$SANDBOX_KEY"
+ID=$(hc sandbox get-id HC-HQ)
+HOST=$(hc sandbox get-host $ID)
+ENDPOINT=$(hc sandbox inspect $ID | jq -r '.provision | "\(.ProvisionProxy_result.upstream_ip):\(.mapped_ports.wireguard)"')
+SANDBOX_KEY=$(hc sandbox egress get $HOST | jq -r .wg_local_public_key)
+KEY=$(mktemp)
+hc proxy --quiet --endpoint "$ENDPOINT" --sandbox-key "$SANDBOX_KEY" > "$KEY" &
+sleep 3
+hc sandbox egress set $HOST on --public-key $(cat "$KEY")
 ```
-
-With `--quiet`, stdout is only the client key.
-
-While it runs, register that client key and turn the switch on in one call:
-
-```sh
-hc sandbox egress set <host> on --public-key <client-public-key>
-hc sandbox egress get <host>                    # healthy: true
-hc sandbox egress get <host> --switch-status    # enabled: true
-```
-
-`set on --public-key` registers the peer *and* flips the switch; the registration
-waits for the peer to become healthy, so the proxy must already be up. The client
-key is stable across runs; `hc proxy --reset` generates a new one.
 
 ### Disable
 
 ```sh
-hc sandbox egress set <host> off
-# stop hc proxy (Ctrl+C, or SIGTERM its PID); this also stops its child helper
+pkill -f 'hc-proxy serve'
 ```
-
-If `hc proxy` stops, `healthy` becomes false even though the switch stays on.
 
 All `hc sandbox egress` output is the raw JSON.
