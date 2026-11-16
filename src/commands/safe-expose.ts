@@ -83,9 +83,12 @@ async function safeExpose(options: { reset?: boolean }): Promise<void> {
     console.error(`Saved endpoint to ${USER_CONFIG_PATH}`)
   }
   // Save once ssh logs in (OpenSSH prints this at LogLevel=VERBOSE), so a dropped tunnel still remembers.
+  // Whether ssh printed "remote port forwarding failed", e.g. for port 2222.
+  let remoteForwardFailed = false
   child.stderr!.on("data", (chunk) => {
     process.stderr.write(chunk)
     if (String(chunk).includes("Authenticated to ")) save()
+    if (String(chunk).includes("remote port forwarding failed")) remoteForwardFailed = true
   })
   let interrupted = false
   const onInterrupt = () => {
@@ -96,7 +99,15 @@ async function safeExpose(options: { reset?: boolean }): Promise<void> {
   try {
     const [code, signal] = await once(child, "close")
     if (code !== 0 && !interrupted && signal !== "SIGINT") {
-      throw new Error(`ssh exited with code ${code}`)
+      if (remoteForwardFailed) {
+        throw new Error(
+          `sandbox port ${decoded.port} is already in use: another ` +
+            "`hc safe-expose` with this endpoint is still connected, on this " +
+            "or another computer. Stop it, then run this again"
+        )
+      } else {
+        throw new Error(`ssh exited with code ${code}`)
+      }
     }
     // Save on normal exit or Ctrl+C; SSH errors skip saving.
     save()
