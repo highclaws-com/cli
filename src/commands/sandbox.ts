@@ -60,6 +60,30 @@ async function findSandbox(id: string): Promise<any> {
   return row
 }
 
+// Print the ID of the sandbox with this exact name, e.g. for `$(hc sandbox get-id HC-HQ)`.
+// Names need not be unique, so more than one match is an error that lists them.
+async function getId(name: string): Promise<void> {
+  const limit = 100
+  const matches: any[] = []
+  // The provision API counts pages from 0.
+  for (let page = 0; ; page++) {
+    const data = await apiJson(
+      `${PROVISION_API}/provisions?show_deleted=false&limit=${limit}&page=${page}`
+    )
+    matches.push(...data.items.filter((row: any) => row.name === name))
+    if (!data.items.length || (page + 1) * limit >= data.total_records) break
+  }
+  if (matches.length === 0) {
+    throw new Error(`no sandbox named ${name}`)
+  } else if (matches.length > 1) {
+    throw new Error(
+      `${matches.length} sandboxes are named ${name}: ` +
+        matches.map((row) => row.provision_id).join(", ")
+    )
+  }
+  console.log(matches[0].provision_id)
+}
+
 // Wait for a background job, printing each new progress message on stderr.
 async function waitJob(jobId: string): Promise<void> {
   let progress = ""
@@ -593,6 +617,11 @@ export function registerSandbox(program: Command): void {
     .option("--deleted", "include deleted sandboxes")
     .option("--json", "print the API response JSON")
     .action(ls)
+
+  sandbox
+    .command("get-id <name>")
+    .description("print the ID of the sandbox with this name")
+    .action(getId)
 
   sandbox
     .command("ls-tiers")

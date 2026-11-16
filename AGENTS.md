@@ -128,7 +128,9 @@ and rsync.
 
 ## Sandbox management
 
-`<id>` is the `provision_id` from `hc sandbox ls`. Commands that change a
+`<id>` is the `provision_id` from `hc sandbox ls`, or from
+`hc sandbox get-id <name>`, which prints the ID of the sandbox with that exact
+name and fails if none or several have it. Commands that change a
 sandbox wait until the change is applied, printing progress on stderr.
 
 ```sh

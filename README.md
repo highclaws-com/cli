@@ -21,6 +21,8 @@ hc account redeem <code>
 hc sandbox ls-tiers
 # list sandboxes; add --json to any sandbox or connector command for JSON
 hc sandbox ls
+# print the ID of the sandbox with this name
+hc sandbox get-id <name>
 # list saved connectors: models, free-models, ims, or vaults
 hc connector ls models
 # list the providers of a kind and the fields each one takes
