@@ -378,22 +378,23 @@ fails. Turn on both.
 
 ### Enable
 
-`hc proxy` needs two inputs, which it prompts for and saves (later runs do not
-prompt):
+`hc proxy` needs two inputs, and saves them (later runs do not ask):
 
-- **Endpoint** = `<upstream_ip>:<mapped_ports.wireguard>` from `hc sandbox ls --json`.
-  `upstream_ip` is inside `ProvisionProxy_result`, which may be a JSON string —
-  parse it.
-- **Sandbox WireGuard Public Key** = `wg_local_public_key` from
-  `hc sandbox egress get <host>`.
+- **Endpoint**: a secret, asked for as in Secret values.
+  `hc sandbox inspect <id> | jq -r '.provision | "\(.ProvisionProxy_result.upstream_ip):\(.mapped_ports.wireguard)"'`
+- **Sandbox WireGuard Public Key**: public, given with `--sandbox-key`, which
+  replaces the saved one. `hc sandbox egress get <host> | jq -r .wg_local_public_key`
 
 Start the proxy first — it prints the **Client WireGuard Public Key** and then
-blocks in the foreground, so run it in a terminal (or background it and read the
-key from its output) and keep it running:
+blocks in the foreground, so run it in a terminal (or background it) and keep it
+running:
 
 ```sh
-hc proxy
+echo "$ENDPOINT" | hc proxy --sandbox-key "$SANDBOX_KEY"
 ```
+
+The client key is also saved as `.proxy.publicKey` in the config file
+(`~/.config/highclaws/config.json` on Linux).
 
 While it runs, register that client key and turn the switch on in one call:
 

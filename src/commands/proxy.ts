@@ -1,19 +1,12 @@
 import { execFileSync, spawn } from "node:child_process"
-import readline from "node:readline/promises"
 import { Command } from "commander"
 import {
   ProxyConfig,
   getUserConfig,
   updateUserConfig
 } from "../config"
+import { askSecrets } from "../output"
 import { ensureProxyHelper } from "../proxy-helper"
-
-async function ask(
-  rl: readline.Interface,
-  label: string
-): Promise<string> {
-  return (await rl.question(`${label}: `)).trim()
-}
 
 function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publicKey"> {
   const output = execFileSync(helper, ["keygen"], {
@@ -27,27 +20,35 @@ function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publ
   return { privateKey: keys.privateKey, publicKey: keys.publicKey }
 }
 
-async function proxy(options: { reset: boolean; upgrade: boolean }): Promise<void> {
+async function proxy(
+  options: { reset: boolean; upgrade: boolean; sandboxKey?: string }
+): Promise<void> {
   const helper = await ensureProxyHelper(options.upgrade)
   if (options.reset) updateUserConfig("proxy", undefined)
   const saved = getUserConfig("proxy")
-  let config: ProxyConfig
-  if (saved) {
-    config = saved
-  } else {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-    const endpoint = await ask(rl, "Server WireGuard Endpoint")
-    const serverPublicKey = await ask(
-      rl,
-      "Sandbox WireGuard Public Key"
-    )
-    rl.close()
-    if (!endpoint || !serverPublicKey) {
-      throw new Error("both values shown by the web UI are required")
-    }
-    config = { endpoint, serverPublicKey, ...generateKeypair(helper) }
-    updateUserConfig("proxy", config)
+  // The endpoint is a secret, so it is asked for (or read from stdin), never
+  // taken as an option. The sandbox key is public: --sandbox-key overrides it.
+  // Missing values are asked in one go, so piped lines are not lost between them.
+  let endpoint = saved?.endpoint
+  let serverPublicKey = options.sandboxKey ?? saved?.serverPublicKey
+  const labels = [
+    ...(endpoint ? [] : ["Server WireGuard Endpoint"]),
+    ...(serverPublicKey ? [] : ["Sandbox WireGuard Public Key"])
+  ]
+  if (labels.length) {
+    const answers = await askSecrets(labels)
+    if (!endpoint) endpoint = answers.shift()
+    if (!serverPublicKey) serverPublicKey = answers.shift()
   }
+  if (!endpoint || !serverPublicKey) {
+    throw new Error("the endpoint and the sandbox key are both required")
+  }
+  const config: ProxyConfig = {
+    ...(saved ?? generateKeypair(helper)),
+    endpoint,
+    serverPublicKey
+  }
+  updateUserConfig("proxy", config)
 
   console.log(`\nClient WireGuard Public Key:\n${config.publicKey}`)
   console.log("Paste this into the web UI, then turn on the Egress Proxy switch.")
@@ -77,5 +78,6 @@ export function registerProxy(program: Command): void {
     .description("proxy sandbox browser egress through this computer")
     .option("--upgrade", "download the latest proxy helper")
     .option("--reset", "reset the saved configuration and client key")
+    .option("--sandbox-key <key>", "the Sandbox WireGuard Public Key, used instead of the saved one")
     .action(proxy)
 }
