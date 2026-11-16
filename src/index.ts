@@ -13,6 +13,9 @@ import { registerSync } from "./commands/sync"
 
 const program = new Command()
 program.name("hc")
+// List commands alphabetically in every help. Set before the commands are
+// added: each subcommand copies this setting when it is created.
+program.configureHelp({ sortSubcommands: true })
 
 registerAccount(program)
 registerAdmin(program)
