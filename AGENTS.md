@@ -325,6 +325,19 @@ runs in the foreground; Ctrl+C stops it.
 hc safe-expose
 ```
 
+From a sandbox name, in the background:
+
+```sh
+ID=$(hc sandbox get-id HC-HQ)
+hc sandbox get-endpoint $ID $(hostname) | hc safe-expose --reset &
+```
+
+Stop it:
+
+```sh
+pkill -f 'hc-proxy ssh-tunnel'
+```
+
 The computer's PORT inside the sandbox reaches port 22 on this computer.
 List the computers, their ports, and whether each is connected, or remove one:
 
