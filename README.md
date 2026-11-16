@@ -23,6 +23,8 @@ hc sandbox ls-tiers
 hc sandbox ls
 # print the ID of the sandbox with this name
 hc sandbox get-id <name>
+# print the host of the sandbox with this name
+hc sandbox get-host <name>
 # list saved connectors: models, free-models, ims, or vaults
 hc connector ls models
 # list the providers of a kind and the fields each one takes

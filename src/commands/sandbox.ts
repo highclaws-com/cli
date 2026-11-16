@@ -60,9 +60,9 @@ async function findSandbox(id: string): Promise<any> {
   return row
 }
 
-// Print the ID of the sandbox with this exact name, e.g. for `$(hc sandbox get-id HC-HQ)`.
-// Names need not be unique, so more than one match is an error that lists them.
-async function getId(name: string): Promise<void> {
+// The sandbox list row of the sandbox with this exact name. Names need not be
+// unique, so more than one match is an error that lists them.
+async function findSandboxByName(name: string): Promise<any> {
   const limit = 100
   const matches: any[] = []
   // The provision API counts pages from 0.
@@ -81,7 +81,19 @@ async function getId(name: string): Promise<void> {
         matches.map((row) => row.provision_id).join(", ")
     )
   }
-  console.log(matches[0].provision_id)
+  return matches[0]
+}
+
+// Print the ID of the sandbox with this name, e.g. for `$(hc sandbox get-id HC-HQ)`.
+async function getId(name: string): Promise<void> {
+  console.log((await findSandboxByName(name)).provision_id)
+}
+
+// Print the host of the sandbox with this name, e.g. for `$(hc sandbox get-host HC-HQ)`.
+async function getHost(name: string): Promise<void> {
+  const host = sandboxHost(await findSandboxByName(name))
+  if (!host) throw new Error(`sandbox ${name} has no host yet`)
+  console.log(host)
 }
 
 // Wait for a background job, printing each new progress message on stderr.
@@ -622,6 +634,11 @@ export function registerSandbox(program: Command): void {
     .command("get-id <name>")
     .description("print the ID of the sandbox with this name")
     .action(getId)
+
+  sandbox
+    .command("get-host <name>")
+    .description("print the host of the sandbox with this name")
+    .action(getHost)
 
   sandbox
     .command("ls-tiers")

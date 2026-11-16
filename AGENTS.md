@@ -208,7 +208,9 @@ each agent's current name and model, and is the value `--agent` takes in
 ## Message the sandbox agent
 
 Anything the sandbox agent manages itself (scheduled jobs, files, its browser)
-is done by asking it. `<host>` is the HOST column from `hc sandbox ls`.
+is done by asking it. `<host>` is the HOST column from `hc sandbox ls`, or
+from `hc sandbox get-host <name>`, which prints the host of the sandbox with
+that exact name.
 
 ```sh
 hc sandbox msg <host> "<message>" [--agent <profile>] [--conversation <key>] [--no-toolcall-print]
