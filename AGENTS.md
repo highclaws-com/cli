@@ -325,17 +325,17 @@ runs in the foreground; Ctrl+C stops it.
 hc safe-expose
 ```
 
-From a sandbox name, in the background:
+From a sandbox name, as tunnel `my-laptop` (default: this computer's hostname):
 
 ```sh
-ID=$(hc sandbox get-id HC-HQ)
-hc sandbox get-endpoint $ID $(hostname) | hc safe-expose --reset &
+hc safe-expose HC-HQ my-laptop
 ```
 
-Stop it:
+It fetches a fresh endpoint on each try and reconnects after any failure,
+waiting 1s, 2s, 4s… up to 10 min, so it can run on startup. Stop it:
 
 ```sh
-pkill -f 'hc-proxy ssh-tunnel'
+pkill -f safe-expose
 ```
 
 The computer's PORT inside the sandbox reaches port 22 on this computer.

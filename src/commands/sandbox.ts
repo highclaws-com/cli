@@ -62,10 +62,15 @@ async function findSandbox(id: string): Promise<any> {
   return row
 }
 
+// The ID of the newest sandbox with this name.
+export async function sandboxIdByName(name: string): Promise<string> {
+  const row = await apiJson(`${PROVISION_API}/provision-by-name/${encodeURIComponent(name)}`)
+  return row.provision_id
+}
+
 // Print the ID of the newest sandbox with this name, e.g. for `$(hc sandbox get-id HC-HQ)`.
 async function getId(name: string): Promise<void> {
-  const row = await apiJson(`${PROVISION_API}/provision-by-name/${encodeURIComponent(name)}`)
-  console.log(row.provision_id)
+  console.log(await sandboxIdByName(name))
 }
 
 // Print the host of a sandbox, e.g. for `$(hc sandbox get-host <id>)`.
@@ -432,10 +437,10 @@ async function getSyncToken(host: string): Promise<void> {
   console.log(await apiRequest(url))
 }
 
-// Print the value that `hc safe-expose` and `hc safe-forward` take: the
-// sandbox's tunnel address and the client's credentials as base64url JSON.
-// The client is added if new.
-async function getEndpoint(id: string, clientName: string): Promise<void> {
+// The value that `hc safe-expose` and `hc safe-forward` take: the sandbox's
+// tunnel address and the client's credentials as base64url JSON. The client
+// is added if new.
+export async function tunnelEndpoint(id: string, clientName: string): Promise<string> {
   const row = await findSandbox(id)
   // Tunnel data is an object, e.g. {server, destination, uuid, ...}.
   if (typeof row.mapped_ports?.reverse_ssh !== "object" || !row.mapped_ports.reverse_ssh) {
@@ -446,10 +451,14 @@ async function getEndpoint(id: string, clientName: string): Promise<void> {
   const keys = await apiJson(
     `${hostBase(sandboxHost(row)!)}/mgr/api/v1/ssh/clients`, "POST", { name: clientName }
   )
-  console.log(Buffer.from(JSON.stringify({
+  return Buffer.from(JSON.stringify({
     ...row.mapped_ports.reverse_ssh,
     ...keys.key
-  })).toString("base64url"))
+  })).toString("base64url")
+}
+
+async function getEndpoint(id: string, clientName: string): Promise<void> {
+  console.log(await tunnelEndpoint(id, clientName))
 }
 
 async function lsClients(id: string, options: OutputOptions): Promise<void> {

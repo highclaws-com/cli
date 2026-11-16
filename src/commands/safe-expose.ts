@@ -1,12 +1,14 @@
 import fs from "node:fs"
 import { spawn } from "node:child_process"
 import { once } from "node:events"
+import os from "node:os"
 import path from "node:path"
 import { Command } from "commander"
 import { USER_CACHE_DIR, USER_CONFIG_PATH, getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
 import { askSecrets } from "../output"
 import { ensureProxyHelper } from "../proxy-helper"
+import { sandboxIdByName, tunnelEndpoint } from "./sandbox"
 
 // Sandbox TCP port of the SSH server that accepts the reverse forward.
 const REVERSE_SSH_PORT = 2022
@@ -24,13 +26,45 @@ export function tunnelValue(decoded: any, port: number): string {
   })).toString("base64url")
 }
 
+// Longest wait between reconnects.
+const RETRY_MAX_MS = 10 * 60 * 1000
+
 // Reverse-forwards the sandbox's 127.0.0.1:<port> to this computer's sshd on
-// port 22. The endpoint decodes to JSON with the client's SSH key ("key"),
-// the sandbox host key ("host_key"), and the client's sandbox port ("port").
-async function safeExpose(options: { reset?: boolean; upgrade?: boolean }): Promise<void> {
-  const saved = options.reset ? undefined : getUserConfig("reverse_ssh")?.endpoint
-  const endpoint = saved ?? (await askSecrets(["Endpoint"]))[0]
+// port 22. With a sandbox name, it reconnects forever with a fresh endpoint,
+// waiting 1s, 2s, 4s... up to 10 min; a login resets the wait.
+async function safeExpose(
+  sandbox: string | undefined,
+  tunnel: string | undefined,
+  options: { reset?: boolean; upgrade?: boolean }
+): Promise<void> {
   const helper = await ensureProxyHelper(options.upgrade)
+  if (!sandbox) {
+    const saved = options.reset ? undefined : getUserConfig("reverse_ssh")?.endpoint
+    const endpoint = saved ?? (await askSecrets(["Endpoint"]))[0]
+    return runTunnel(helper, endpoint, () => {
+      updateUserConfig("reverse_ssh", { endpoint })
+      console.error(`Saved endpoint to ${USER_CONFIG_PATH}`)
+    })
+  }
+  let wait = 1000
+  while (true) {
+    try {
+      const endpoint = await tunnelEndpoint(await sandboxIdByName(sandbox), tunnel ?? os.hostname())
+      await runTunnel(helper, endpoint, () => { wait = 1000 })
+    } catch (e) {
+      console.error(`error: ${(e as Error).message}`)
+    }
+    console.error(`retrying in ${wait / 1000}s`)
+    await new Promise((resolve) => setTimeout(resolve, wait))
+    wait = Math.min(wait * 2, RETRY_MAX_MS)
+  }
+}
+
+// One SSH run of the tunnel. Ctrl+C or SIGTERM stops ssh and exits.
+// The endpoint decodes to JSON with the client's SSH key ("key"), the sandbox
+// host key ("host_key"), and the client's sandbox port ("port"). `onLogin` is
+// called once ssh logs in, and again when it ends without error.
+async function runTunnel(helper: string, endpoint: string, onLogin?: () => void): Promise<void> {
   const helperPath = helper.split(path.sep).join("/")
   const quotedHelper = process.platform === "win32"
     ? `"${helperPath}"`
@@ -70,6 +104,9 @@ async function safeExpose(options: { reset?: boolean; upgrade?: boolean }): Prom
     "-o", "BatchMode=yes",
     "-o", "LogLevel=VERBOSE",
     "-o", "ExitOnForwardFailure=yes",
+    // Exit within about 90s when the network silently drops the connection.
+    "-o", "ServerAliveInterval=30",
+    "-o", "ServerAliveCountMax=3",
     "-o", "HostKeyAlias=sandbox",
     "-o", `UserKnownHostsFile="${knownHostsFile.split(path.sep).join("/")}"`,
     "-o", "StrictHostKeyChecking=yes",
@@ -78,10 +115,7 @@ async function safeExpose(options: { reset?: boolean; upgrade?: boolean }): Prom
     "-i", keyFile,
     `tunnel${decoded.port}@sandbox`
   ], { stdio: ["inherit", "inherit", "pipe"], env: { ...process.env, TUNNEL } })
-  const save = () => {
-    updateUserConfig("reverse_ssh", { endpoint })
-    console.error(`Saved endpoint to ${USER_CONFIG_PATH}`)
-  }
+  const save = () => onLogin?.()
   // Save once ssh logs in (OpenSSH prints this at LogLevel=VERBOSE), so a dropped tunnel still remembers.
   // Whether ssh printed "remote port forwarding failed", e.g. for port 2222.
   let remoteForwardFailed = false
@@ -96,6 +130,7 @@ async function safeExpose(options: { reset?: boolean; upgrade?: boolean }): Prom
     child.kill("SIGINT")
   }
   process.on("SIGINT", onInterrupt)
+  process.on("SIGTERM", onInterrupt)
   try {
     const [code, signal] = await once(child, "close")
     if (code !== 0 && !interrupted && signal !== "SIGINT") {
@@ -111,15 +146,20 @@ async function safeExpose(options: { reset?: boolean; upgrade?: boolean }): Prom
     }
     // Save on normal exit or Ctrl+C; SSH errors skip saving.
     save()
+    if (interrupted) process.exit(0)
   } finally {
     process.off("SIGINT", onInterrupt)
+    process.off("SIGTERM", onInterrupt)
   }
 }
 
 export function registerSafeExpose(program: Command): void {
   program
-    .command("safe-expose")
-    .description("let the sandbox reach this computer's SSH server (port 22)")
+    .command("safe-expose [sandbox] [tunnel]")
+    .description(
+      "let the sandbox reach this computer's SSH server (port 22); with a sandbox " +
+        "name, keep reconnecting as tunnel <tunnel> (default: this hostname)"
+    )
     .option("--reset", "ask for a new endpoint instead of the saved one")
     .option("--upgrade", "download the latest proxy helper")
     .action(safeExpose)
