@@ -21,7 +21,9 @@ function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publ
 }
 
 async function proxy(
-  options: { reset: boolean; upgrade: boolean; endpoint?: string; sandboxKey?: string }
+  options: {
+    reset: boolean; upgrade: boolean; quiet?: boolean; endpoint?: string; sandboxKey?: string
+  }
 ): Promise<void> {
   const helper = await ensureProxyHelper(options.upgrade)
   if (options.reset) updateUserConfig("proxy", undefined)
@@ -49,13 +51,18 @@ async function proxy(
   }
   updateUserConfig("proxy", config)
 
-  console.log(`\nClient WireGuard Public Key:\n${config.publicKey}`)
-  console.log("Paste this into the web UI, then turn on the Egress Proxy switch.")
-  console.log("The proxy is running. Press Ctrl+C to stop it.\n")
+  // With --quiet, stdout is only the client key; the helper's output goes to stderr.
+  if (options.quiet) {
+    console.log(config.publicKey)
+  } else {
+    console.log(`\nClient WireGuard Public Key:\n${config.publicKey}`)
+    console.log("Paste this into the web UI, then turn on the Egress Proxy switch.")
+    console.log("The proxy is running. Press Ctrl+C to stop it.\n")
+  }
 
   const child = spawn(helper, [
     "serve"
-  ], { stdio: ["pipe", "inherit", "inherit"], windowsHide: true })
+  ], { stdio: ["pipe", options.quiet ? process.stderr : "inherit", "inherit"], windowsHide: true })
   child.stdin.end(JSON.stringify(config))
   const stop = (): void => {
     child.kill()
@@ -79,5 +86,6 @@ export function registerProxy(program: Command): void {
     .option("--reset", "reset the saved configuration and client key")
     .option("--endpoint <ip:port>", "the Server WireGuard Endpoint, used instead of the saved one")
     .option("--sandbox-key <key>", "the Sandbox WireGuard Public Key, used instead of the saved one")
+    .option("--quiet", "print only the Client WireGuard Public Key on stdout")
     .action(proxy)
 }

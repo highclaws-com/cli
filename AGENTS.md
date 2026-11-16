@@ -395,8 +395,7 @@ running:
 hc proxy --endpoint "$ENDPOINT" --sandbox-key "$SANDBOX_KEY"
 ```
 
-The client key is also saved as `.proxy.publicKey` in the config file
-(`~/.config/highclaws/config.json` on Linux).
+With `--quiet`, stdout is only the client key.
 
 While it runs, register that client key and turn the switch on in one call:
 
