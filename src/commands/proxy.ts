@@ -21,15 +21,14 @@ function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publ
 }
 
 async function proxy(
-  options: { reset: boolean; upgrade: boolean; sandboxKey?: string }
+  options: { reset: boolean; upgrade: boolean; endpoint?: string; sandboxKey?: string }
 ): Promise<void> {
   const helper = await ensureProxyHelper(options.upgrade)
   if (options.reset) updateUserConfig("proxy", undefined)
   const saved = getUserConfig("proxy")
-  // The endpoint is a secret, so it is asked for (or read from stdin), never
-  // taken as an option. The sandbox key is public: --sandbox-key overrides it.
-  // Missing values are asked in one go, so piped lines are not lost between them.
-  let endpoint = saved?.endpoint
+  // --endpoint and --sandbox-key override the saved values. Missing values are
+  // asked in one go, so piped lines are not lost between them.
+  let endpoint = options.endpoint ?? saved?.endpoint
   let serverPublicKey = options.sandboxKey ?? saved?.serverPublicKey
   const labels = [
     ...(endpoint ? [] : ["Server WireGuard Endpoint"]),
@@ -78,6 +77,7 @@ export function registerProxy(program: Command): void {
     .description("proxy sandbox browser egress through this computer")
     .option("--upgrade", "download the latest proxy helper")
     .option("--reset", "reset the saved configuration and client key")
+    .option("--endpoint <ip:port>", "the Server WireGuard Endpoint, used instead of the saved one")
     .option("--sandbox-key <key>", "the Sandbox WireGuard Public Key, used instead of the saved one")
     .action(proxy)
 }

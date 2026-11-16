@@ -380,17 +380,19 @@ fails. Turn on both.
 
 `hc proxy` needs two inputs, and saves them (later runs do not ask):
 
-- **Endpoint**: a secret, asked for as in Secret values.
+- **Endpoint**, given with `--endpoint`:
   `hc sandbox inspect <id> | jq -r '.provision | "\(.ProvisionProxy_result.upstream_ip):\(.mapped_ports.wireguard)"'`
-- **Sandbox WireGuard Public Key**: public, given with `--sandbox-key`, which
-  replaces the saved one. `hc sandbox egress get <host> | jq -r .wg_local_public_key`
+- **Sandbox WireGuard Public Key**, given with `--sandbox-key`:
+  `hc sandbox egress get <host> | jq -r .wg_local_public_key`
+
+Each option replaces the saved value; a value with neither is asked for.
 
 Start the proxy first — it prints the **Client WireGuard Public Key** and then
 blocks in the foreground, so run it in a terminal (or background it) and keep it
 running:
 
 ```sh
-echo "$ENDPOINT" | hc proxy --sandbox-key "$SANDBOX_KEY"
+hc proxy --endpoint "$ENDPOINT" --sandbox-key "$SANDBOX_KEY"
 ```
 
 The client key is also saved as `.proxy.publicKey` in the config file
