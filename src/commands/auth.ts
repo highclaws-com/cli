@@ -1,10 +1,10 @@
-import readline from "node:readline/promises"
 import { Command } from "commander"
 import {
   APP_DOMAIN,
   USER_CONFIG_PATH,
   updateUserConfig
 } from "../config"
+import { askSecrets } from "../output"
 
 const LOGIN_CALLBACK_URL = `https://${APP_DOMAIN}/u/code`
 const LOGIN_URL = `https://${APP_DOMAIN}/u/login?next=${encodeURIComponent(LOGIN_CALLBACK_URL)}`
@@ -39,9 +39,7 @@ export function registerAuth(program: Command): void {
     .description(`log in through ${APP_DOMAIN}`)
     .action(async () => {
       console.log(`Open this URL in your browser:\n${LOGIN_URL}`)
-      const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-      const token = (await rl.question("Paste login code: ")).trim()
-      rl.close()
+      const [token] = await askSecrets(["Paste login code"])
       validateJwt(token)
       updateUserConfig("auth", { jwt: token })
       console.log(`Logged in. Credentials saved to ${USER_CONFIG_PATH}`)
