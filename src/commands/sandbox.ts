@@ -440,7 +440,7 @@ async function lsClients(id: string, options: OutputOptions): Promise<void> {
 
 async function rmClient(id: string, clientName: string, options: { force?: boolean }): Promise<void> {
   if (!options.force) {
-    await confirm(`Remove client ${clientName}? The other clients will have to reconnect.`)
+    await confirm(`Remove client ${clientName}? It will be disconnected.`)
   }
   const row = await findSandbox(id)
   await apiJson(
@@ -721,13 +721,13 @@ Each item is <agent-id>:<display name>=<id>,<id>. Other agents are left as they 
 
   sandbox
     .command("ls-clients <id>")
-    .description("list the clients connected with `hc safe-expose`")
+    .description("list the clients added with `hc sandbox get-endpoint`, and whether each is connected")
     .option("--json", "print the API response JSON")
     .action(lsClients)
 
   sandbox
     .command("rm-client <id> <name>")
-    .description("revoke a client's key; the other clients must reconnect")
+    .description("revoke a client's key and disconnect it")
     .option("--force", "do not ask for confirmation")
     .action(rmClient)
 

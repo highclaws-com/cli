@@ -205,7 +205,7 @@ hc sandbox file-backup <host> --list <dir> [--page <n>]
 
 To rotate the file sync token or the Safe Connect access code, ask the agent
 through `msg`; it does both through its sandbox management API. Then read the
-new value with `hc sandbox get-sync-token` or `hc sandbox get-endpoint`.
+new value with `hc sandbox get-sync-token` or `hc sandbox get-endpoint <id> <name>`.
 
 If the agent does not answer, restart it, then send the message again:
 
@@ -280,17 +280,24 @@ Ctrl+C stops it.
 ## Connect a computer
 
 `hc safe-expose` lets the sandbox reach this computer's SSH server on port 22.
-`ENDPOINT` is printed by `hc sandbox get-endpoint <id>` (`<id>` is the
-`provision_id` from `hc sandbox ls`); it is a secret. It is saved
-after the first successful connection, so later runs need no argument. It
-runs in the foreground; Ctrl+C stops it.
+`ENDPOINT` is printed by `hc sandbox get-endpoint <id> <name>` (`<id>` is the
+`provision_id` from `hc sandbox ls`; `<name>` names this computer, e.g.
+`laptop`, and is added if new); it is a secret. Each computer needs its own
+name. It is saved after the first successful connection, so later runs need
+no argument. It runs in the foreground; Ctrl+C stops it.
 
 ```sh
 hc safe-expose ENDPOINT
 hc safe-expose
 ```
 
-Port 2222 inside the sandbox reaches port 22 on this computer.
+The computer's PORT inside the sandbox reaches port 22 on this computer.
+List the computers, their ports, and whether each is connected, or remove one:
+
+```sh
+hc sandbox ls-clients <id>
+hc sandbox rm-client <id> <name>
+```
 
 `hc safe-forward` goes the other way: it forwards a local port to the TCP
 service the cloud agent runs on the sandbox's private port, whatever protocol
@@ -309,10 +316,11 @@ From inside the sandbox:
 ```sh
 SSHPASS=your-password
 SSH_USER=your-user
+SSH_PORT=2222  # the computer's PORT from `hc sandbox ls-clients <id>`
 sshpass -e ssh \
   -o PubkeyAuthentication=no \
   -o StrictHostKeyChecking=accept-new \
-  -p 2222 "$SSH_USER"@localhost \
+  -p "$SSH_PORT" "$SSH_USER"@localhost \
   'pwd'
 ```
 

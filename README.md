@@ -113,7 +113,8 @@ hc safe-expose ENDPOINT
 ```
 
 `ENDPOINT` is the value shown in the sandbox console, also printed by
-`hc sandbox get-endpoint <id>`. It is saved after a
+`hc sandbox get-endpoint <id> <name>`, where `<name>` names this computer,
+e.g. `laptop`. Each computer needs its own name. It is saved after a
 successful connection. Press Ctrl+C to stop.
 
 Ask the sandbox agent to SSH to this computer.
