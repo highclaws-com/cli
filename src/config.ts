@@ -73,6 +73,15 @@ export const USER_CACHE_DIR = process.platform === "win32"
       APP_NAME
     )
 
+// Put a downloaded executable in place. On Linux and macOS the rename works
+// while a process still runs the previous file, which writing over it does
+// not; on Windows that process must be stopped first.
+export function saveExecutable(executable: string, data: Uint8Array): void {
+  fs.writeFileSync(`${executable}.new`, data, { mode: 0o700 })
+  if (process.platform !== "win32") fs.chmodSync(`${executable}.new`, 0o700)
+  fs.renameSync(`${executable}.new`, executable)
+}
+
 // Saved `hc safe-expose` and `hc safe-forward` endpoint, reused until
 // `--reset` asks for a new one.
 export interface ReverseSshConfig {

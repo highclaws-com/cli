@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process"
 import { Command, InvalidArgumentError } from "commander"
-import { DEFAULT_CLOUDFLARED_VERSION, ensureCloudflared } from "../cloudflared"
+import { ensureCloudflared } from "../cloudflared"
 
-async function expose(targetText: string, cloudflaredVersion: string): Promise<void> {
+async function expose(targetText: string, options: { upgrade?: boolean }): Promise<void> {
   const match = /^(tcp|https?):(\d+)$/.exec(targetText)
   if (!match) {
     throw new InvalidArgumentError("target must look like tcp:43817, http:43817, or https:43817")
@@ -12,7 +12,7 @@ async function expose(targetText: string, cloudflaredVersion: string): Promise<v
   if (port < 1 || port > 65535) {
     throw new InvalidArgumentError("port must be from 1 to 65535")
   }
-  const cloudflared = await ensureCloudflared(cloudflaredVersion)
+  const cloudflared = await ensureCloudflared(options.upgrade)
   const child = spawn(
     cloudflared,
     ["tunnel", "--no-autoupdate", "--url", `${protocol}://127.0.0.1:${port}`],
@@ -51,16 +51,10 @@ export function registerExpose(program: Command): void {
   program
     .command("expose <target>")
     .description("expose a local TCP or HTTP service through Cloudflare")
-    .option(
-      "--cloudflared-version <version>",
-      "cloudflared release version",
-      DEFAULT_CLOUDFLARED_VERSION
-    )
+    .option("--upgrade", "download the latest cloudflared")
     .addHelpText(
       "after",
       "\nExamples:\n  hc expose tcp:43817\n  hc expose http:8000\n  hc expose https:8443"
     )
-    .action((target: string, options: { cloudflaredVersion: string }) =>
-      expose(target, options.cloudflaredVersion)
-    )
+    .action(expose)
 }

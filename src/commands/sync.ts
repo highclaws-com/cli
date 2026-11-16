@@ -6,7 +6,6 @@ import { getUserConfig, updateUserConfig } from "../config"
 import { run } from "../exec"
 import { askSecrets } from "../output"
 import {
-  DEFAULT_RCLONE_VERSION,
   DEFAULT_VFS_CACHE_MODE,
   RCLONE_VFS_CACHE_DIR,
   ensureRclone
@@ -96,11 +95,11 @@ function cygwinArgs(args: string[]): string[] {
 async function mount(
   address: string,
   mountpoint: string,
-  version: string,
+  upgrade: boolean | undefined,
   cacheMode: string,
   ask?: boolean
 ): Promise<void> {
-  const executable = await ensureRclone(version)
+  const executable = await ensureRclone(upgrade)
   const parsed = webdavRemote(address)
   if (!parsed) throw new Error(`invalid sandbox address: ${address}`)
   const token = await syncToken(parsed.tokenAddress, ask)
@@ -156,7 +155,6 @@ export function registerSync(program: Command): void {
     .command("sync")
     .description("sync files with a sandbox worktree")
     .option("--token", "ask for the sync token and save it, replacing the saved one")
-    .option("--rclone-version <version>", "rclone release tag", DEFAULT_RCLONE_VERSION)
     .action(async (options: { token?: boolean }) => {
       if (options.token) {
         await syncToken("default", true)
@@ -174,13 +172,14 @@ export function registerSync(program: Command): void {
       "rclone VFS cache mode (off|minimal|writes|full)",
       DEFAULT_VFS_CACHE_MODE
     )
+    .option("--upgrade", "download the latest rclone")
     .action((address: string, mountpoint: string, _options: unknown, cmd: Command) => {
       const opts = cmd.optsWithGlobals() as {
         token?: boolean
-        rcloneVersion: string
+        upgrade?: boolean
         vfsCacheMode: string
       }
-      return mount(address, mountpoint, opts.rcloneVersion, opts.vfsCacheMode, opts.token)
+      return mount(address, mountpoint, opts.upgrade, opts.vfsCacheMode, opts.token)
     })
 
   sync

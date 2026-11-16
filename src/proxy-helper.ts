@@ -1,6 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
-import { GITHUB_ORG, USER_CACHE_DIR } from "./config"
+import { GITHUB_ORG, USER_CACHE_DIR, saveExecutable } from "./config"
 
 const ASSETS: Record<string, string> = {
   "linux-x64": "hc-proxy-linux-amd64",
@@ -10,7 +10,8 @@ const ASSETS: Record<string, string> = {
   "win32-x64": "hc-proxy-windows-amd64.exe"
 }
 
-export async function ensureProxyHelper(upgrade: boolean): Promise<string> {
+// The downloaded proxy helper, kept until `upgrade` downloads the latest.
+export async function ensureProxyHelper(upgrade?: boolean): Promise<string> {
   const platform = `${process.platform}-${process.arch}`
   const asset = ASSETS[platform]
   if (!asset) throw new Error(`proxy helper is not available for ${platform}`)
@@ -26,7 +27,6 @@ export async function ensureProxyHelper(upgrade: boolean): Promise<string> {
     { redirect: "follow" }
   )
   if (!response.ok) throw new Error(`proxy helper download failed: HTTP ${response.status}`)
-  fs.writeFileSync(executable, Buffer.from(await response.arrayBuffer()), { mode: 0o700 })
-  if (process.platform !== "win32") fs.chmodSync(executable, 0o700)
+  saveExecutable(executable, Buffer.from(await response.arrayBuffer()))
   return executable
 }

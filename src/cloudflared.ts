@@ -1,9 +1,7 @@
 import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
-import { USER_CACHE_DIR } from "./config"
-
-export const DEFAULT_CLOUDFLARED_VERSION = "2026.8.2"
+import { USER_CACHE_DIR, saveExecutable } from "./config"
 
 const ASSETS: Record<string, string> = {
   "linux-x64": "cloudflared-linux-amd64",
@@ -13,19 +11,20 @@ const ASSETS: Record<string, string> = {
   "win32-x64": "cloudflared-windows-amd64.exe"
 }
 
-export async function ensureCloudflared(version = DEFAULT_CLOUDFLARED_VERSION): Promise<string> {
+// The downloaded cloudflared, kept until `upgrade` downloads the latest.
+export async function ensureCloudflared(upgrade?: boolean): Promise<string> {
   const platform = `${process.platform}-${process.arch}`
   const asset = ASSETS[platform]
   if (!asset) throw new Error(`cloudflared is not available for ${platform}`)
 
-  const dir = path.join(USER_CACHE_DIR, "cloudflared", version, platform)
+  const dir = path.join(USER_CACHE_DIR, "cloudflared", platform)
   const executable = path.join(dir, process.platform === "win32" ? "cloudflared.exe" : "cloudflared")
-  if (fs.existsSync(executable)) return executable
+  if (!upgrade && fs.existsSync(executable)) return executable
 
   fs.mkdirSync(dir, { recursive: true })
-  console.error(`Downloading cloudflared ${version} for ${platform}...`)
+  console.error(`Downloading cloudflared for ${platform}...`)
   const response = await fetch(
-    `https://github.com/cloudflare/cloudflared/releases/download/${version}/${asset}`,
+    `https://github.com/cloudflare/cloudflared/releases/latest/download/${asset}`,
     { redirect: "follow" }
   )
   if (!response.ok) throw new Error(`cloudflared download failed: HTTP ${response.status}`)
@@ -36,9 +35,9 @@ export async function ensureCloudflared(version = DEFAULT_CLOUDFLARED_VERSION): 
     fs.writeFileSync(archive, downloaded)
     execFileSync("tar", ["-xzf", archive, "-C", dir])
     fs.unlinkSync(archive)
+    fs.chmodSync(executable, 0o700)
   } else {
-    fs.writeFileSync(executable, downloaded, { mode: 0o700 })
+    saveExecutable(executable, downloaded)
   }
-  if (process.platform !== "win32") fs.chmodSync(executable, 0o700)
   return executable
 }
