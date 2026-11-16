@@ -50,50 +50,27 @@ function sandboxHost(row: any): string | undefined {
   return proxy?.host
 }
 
-// The sandbox list row of one sandbox, which holds what only the list returns,
-// e.g. its host.
+// The provision row of one sandbox, as an item of the sandbox list.
+async function getProvision(id: string): Promise<any> {
+  return apiJson(`${PROVISION_API}/provision/${encodeURIComponent(id)}`)
+}
+
+// The provision row of one sandbox that must have a host.
 async function findSandbox(id: string): Promise<any> {
-  const sandboxes = await apiJson(`${PROVISION_API}/provisions?show_deleted=false&limit=100`)
-  const row = sandboxes.items.find((row: any) => row.provision_id === id)
-  if (!row) throw new Error(`no such sandbox: ${id}`)
+  const row = await getProvision(id)
   if (!sandboxHost(row)) throw new Error(`sandbox ${id} has no host yet`)
   return row
 }
 
-// The sandbox list row of the sandbox with this exact name. Names need not be
-// unique, so more than one match is an error that lists them.
-async function findSandboxByName(name: string): Promise<any> {
-  const limit = 100
-  const matches: any[] = []
-  // The provision API counts pages from 0.
-  for (let page = 0; ; page++) {
-    const data = await apiJson(
-      `${PROVISION_API}/provisions?show_deleted=false&limit=${limit}&page=${page}`
-    )
-    matches.push(...data.items.filter((row: any) => row.name === name))
-    if (!data.items.length || (page + 1) * limit >= data.total_records) break
-  }
-  if (matches.length === 0) {
-    throw new Error(`no sandbox named ${name}`)
-  } else if (matches.length > 1) {
-    throw new Error(
-      `${matches.length} sandboxes are named ${name}: ` +
-        matches.map((row) => row.provision_id).join(", ")
-    )
-  }
-  return matches[0]
-}
-
-// Print the ID of the sandbox with this name, e.g. for `$(hc sandbox get-id HC-HQ)`.
+// Print the ID of the newest sandbox with this name, e.g. for `$(hc sandbox get-id HC-HQ)`.
 async function getId(name: string): Promise<void> {
-  console.log((await findSandboxByName(name)).provision_id)
+  const row = await apiJson(`${PROVISION_API}/provision-by-name/${encodeURIComponent(name)}`)
+  console.log(row.provision_id)
 }
 
-// Print the host of the sandbox with this name, e.g. for `$(hc sandbox get-host HC-HQ)`.
-async function getHost(name: string): Promise<void> {
-  const host = sandboxHost(await findSandboxByName(name))
-  if (!host) throw new Error(`sandbox ${name} has no host yet`)
-  console.log(host)
+// Print the host of a sandbox, e.g. for `$(hc sandbox get-host <id>)`.
+async function getHost(id: string): Promise<void> {
+  console.log(sandboxHost(await findSandbox(id)))
 }
 
 // Wait for a background job, printing each new progress message on stderr.
@@ -435,9 +412,19 @@ async function timezone(id: string, tz: string, options: OutputOptions): Promise
   output(options, data, () => console.log(`timezone set to ${tz}`))
 }
 
-async function inspect(host: string): Promise<void> {
-  const url = `${hostBase(host)}/mgr/api/v1/overview`
-  console.log(await apiRequest(url))
+// The provision row and the manager overview of a sandbox, each as returned.
+// The overview is null, with the reason on stderr, when it cannot be fetched.
+async function inspect(id: string): Promise<void> {
+  const provision = await getProvision(id)
+  let overview = null
+  try {
+    const host = sandboxHost(provision)
+    if (!host) throw new Error("no host yet")
+    overview = await apiJson(`${hostBase(host)}/mgr/api/v1/overview`)
+  } catch (e) {
+    console.error(`overview: ${(e as Error).message}`)
+  }
+  console.log(JSON.stringify({ provision, overview }, null, 2))
 }
 
 async function getSyncToken(host: string): Promise<void> {
@@ -632,12 +619,12 @@ export function registerSandbox(program: Command): void {
 
   sandbox
     .command("get-id <name>")
-    .description("print the ID of the sandbox with this name")
+    .description("print the ID of the newest sandbox with this name")
     .action(getId)
 
   sandbox
-    .command("get-host <name>")
-    .description("print the host of the sandbox with this name")
+    .command("get-host <id>")
+    .description("print the host of a sandbox")
     .action(getHost)
 
   sandbox
@@ -751,8 +738,8 @@ Each item is <agent-id>:<display name>=<id>,<id>. Other agents are left as they 
     .action(timezone)
 
   sandbox
-    .command("inspect <host>")
-    .description("fetch a sandbox manager overview")
+    .command("inspect <id>")
+    .description("print a sandbox's provision row and manager overview")
     .action(inspect)
 
   sandbox

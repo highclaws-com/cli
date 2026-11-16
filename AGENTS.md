@@ -109,13 +109,16 @@ Output is the provision API JSON. The fields needed downstream:
 
 `ProvisionProxy_result` may be a JSON string; parse it if so.
 
-Inspect one sandbox (`<host>` is from above, with or without `https://`):
+Inspect one sandbox:
 
 ```sh
-hc sandbox inspect <host>
+hc sandbox inspect <id>
 ```
 
-Output is the manager overview JSON. The worktrees are `disks.disks[].name`.
+Output is `{"provision": ..., "overview": ...}`: `provision` is the sandbox's
+item of `hc sandbox ls --json`, and `overview` is the manager overview JSON, or
+null when the sandbox cannot be reached. The worktrees are
+`overview.disks.disks[].name`.
 
 Fetch the sync token for a sandbox:
 
@@ -129,8 +132,8 @@ and rsync.
 ## Sandbox management
 
 `<id>` is the `provision_id` from `hc sandbox ls`, or from
-`hc sandbox get-id <name>`, which prints the ID of the sandbox with that exact
-name and fails if none or several have it. Commands that change a
+`hc sandbox get-id <name>`, which prints the ID of the newest sandbox with that
+exact name. Commands that change a
 sandbox wait until the change is applied, printing progress on stderr.
 
 ```sh
@@ -209,8 +212,7 @@ each agent's current name and model, and is the value `--agent` takes in
 
 Anything the sandbox agent manages itself (scheduled jobs, files, its browser)
 is done by asking it. `<host>` is the HOST column from `hc sandbox ls`, or
-from `hc sandbox get-host <name>`, which prints the host of the sandbox with
-that exact name.
+from `hc sandbox get-host <id>`.
 
 ```sh
 hc sandbox msg <host> "<message>" [--agent <profile>] [--conversation <key>] [--no-toolcall-print]
@@ -274,8 +276,8 @@ Notes:
 
 ### Example — mount a worktree
 
-1. `hc sandbox ls --json` → pick the sandbox; read `ProvisionProxy_result.host`.
-2. `hc sandbox inspect <host>` → pick a worktree from `disks.disks[].name`.
+1. `hc sandbox get-id <name>` → the sandbox `<id>`; `hc sandbox get-host <id>` → `<host>`.
+2. `hc sandbox inspect <id>` → pick a worktree from `overview.disks.disks[].name`.
 3. `hc sandbox get-sync-token <host>` → read `token`.
 4. `hc sync mount https://<host>/webdav/<worktree> <mountpoint>` → give it
    that token when asked.
