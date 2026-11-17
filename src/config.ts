@@ -4,8 +4,6 @@ import path from "node:path"
 import dotenv from "dotenv"
 
 export const APP_NAME = "highclaws"
-export const APP_DOMAIN = "highclaws.com"
-export const GITHUB_ORG = "highclaws-com"
 
 export interface SshTarget {
   ip: string
@@ -96,6 +94,8 @@ export interface ProxyConfig {
 }
 
 export interface UserConfig {
+  domain?: string
+  github_org?: string
   auth?: AuthConfig
   proxy?: ProxyConfig
   reverse_ssh?: ReverseSshConfig
@@ -134,6 +134,9 @@ export function getUserConfig<K extends keyof UserConfig>(
 ): UserConfig[K] {
   return withUserConfig((config) => config[key])
 }
+
+export const APP_DOMAIN = getUserConfig("domain") ?? "highclaws.com"
+export const GITHUB_ORG = getUserConfig("github_org") ?? "highclaws-com"
 
 export function updateUserConfig<K extends keyof UserConfig>(
   key: K,

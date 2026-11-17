@@ -103,7 +103,8 @@ hc sandbox ls --json [--limit <n>] [--page <n>]     # defaults: limit 10, page 1
 Output is the provision API JSON. The fields needed downstream:
 
 - `provision_id`, `name`, `status`
-- `ProvisionProxy_result.host` — the sandbox `*.highclaws.com` host (no scheme)
+- `ProvisionProxy_result.host` — the full domain name; `<host>` arguments take
+  only its first part, as `hc sandbox ls` and `hc sandbox get-host` print it
 - `ProvisionProxy_result.upstream_ip` — the direct IP
 - `mapped_ports.webdav`, `mapped_ports.rsync` — the public ports
 
@@ -212,7 +213,7 @@ each agent's current name and model, and is the value `--agent` takes in
 
 Anything the sandbox agent manages itself (scheduled jobs, files, its browser)
 is done by asking it. `<host>` is the HOST column from `hc sandbox ls`, or
-from `hc sandbox get-host <id>`.
+from `hc sandbox get-host <id>`; never add the domain to it.
 
 ```sh
 hc sandbox msg <host> "<message>" [--agent <profile>] [--conversation <key>] [--no-toolcall-print]
@@ -252,7 +253,7 @@ on macOS); see [README.md](README.md) (Windows setup / macOS setup).
 Mount a worktree over WebDAV (via rclone):
 
 ```sh
-hc sync mount https://<host>/webdav/<worktree> <mountpoint>
+hc sync mount <host> <worktree> <mountpoint>
 ```
 
 rsync a worktree:
@@ -279,7 +280,7 @@ Notes:
 1. `hc sandbox get-id <name>` → the sandbox `<id>`; `hc sandbox get-host <id>` → `<host>`.
 2. `hc sandbox inspect <id>` → pick a worktree from `overview.disks.disks[].name`.
 3. `hc sandbox get-sync-token <host>` → read `token`.
-4. `hc sync mount https://<host>/webdav/<worktree> <mountpoint>` → give it
+4. `hc sync mount <host> <worktree> <mountpoint>` → give it
    that token when asked.
 
 ## Expose a local service

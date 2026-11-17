@@ -47,7 +47,7 @@ function sandboxHost(row: any): string | undefined {
   const proxy = typeof row.ProvisionProxy_result === "string"
     ? JSON.parse(row.ProvisionProxy_result)
     : row.ProvisionProxy_result
-  return proxy?.host
+  return proxy?.host?.split(".")[0]
 }
 
 // The provision row of one sandbox, as an item of the sandbox list.

@@ -78,16 +78,21 @@ hc expose tcp:43817
 hc expose http:8000
 # expose a local HTTPS service through Cloudflare
 hc expose https:8443
-# mount a sandbox WebDAV tree
-hc sync mount https://<host>/webdav/<worktree> ./dir
+# mount a sandbox worktree over WebDAV
+hc sync mount <host> <worktree> ./dir
 # sync files with rsync
-hc sync rsync -ar rsync://rsync@<host>:<port>/data/<worktree> ./dir
+hc sync rsync -ar rsync://rsync@<upstream_ip>:<port>/data/<worktree> ./dir
 # replace the saved sync token
 hc sync --token
 ```
 
 Secrets (the endpoint, the sync token, connector keys) are asked for, not
 passed as arguments; see Secret values in [AGENTS.md](AGENTS.md).
+`<host>` is the HOST column of `hc sandbox ls`. The CLI adds the domain.
+
+The user config file (`~/.config/highclaws/config.json` on Linux) can set
+`"domain"` (default `highclaws.com`) and `"github_org"`, where the proxy helper
+is downloaded from (default `highclaws-com`).
 
 ## Windows setup
 

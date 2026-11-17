@@ -1,8 +1,7 @@
-import { getUserConfig } from "./config"
+import { APP_DOMAIN, getUserConfig } from "./config"
 
 export function hostBase(host: string): string {
-  const base = /^https?:\/\//.test(host) ? host : `https://${host}`
-  return base.replace(/\/+$/, "")
+  return `https://${host}.${APP_DOMAIN}`
 }
 
 // Authenticated request; throws unless the response is a success.
