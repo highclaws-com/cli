@@ -206,6 +206,7 @@ export function registerModels(admin: Command, getCtx: () => AdminContext): void
       }
       // The file's base name is the provider update_models.py prices under.
       const aliasFile = path.join(root, "secrets", "models", `${provider}.json`)
+      fs.mkdirSync(path.dirname(aliasFile), { recursive: true })
       fs.writeFileSync(aliasFile, JSON.stringify(aliases, null, 2) + "\n")
       console.log(`wrote ${aliasFile}`)
 
