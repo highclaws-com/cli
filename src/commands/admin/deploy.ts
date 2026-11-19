@@ -11,7 +11,7 @@ interface DeployOptions {
   removeStack?: boolean
   checkout?: boolean
   stack?: boolean
-  service?: string
+  service?: string[]
   secrets?: boolean
   modelListing?: boolean
   updateFirewall?: boolean
@@ -29,7 +29,7 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
     .option("--remove-stack", "remove the swarm-1 stack and wait for its services")
     .option("--checkout", "update the checkout on every swarm node without deploying services")
     .option("--stack", "update the checkout on every swarm node, then deploy the swarm-1 stack on the manager")
-    .option("--service <name>", "update a service to its latest image, e.g. model_pool")
+    .option("--service <names...>", "update services to their latest images, e.g. admission ui_landing")
     .option("--portainer", "deploy portainer on the manager swarm node and open the local tunnel")
     .option("--update-firewall", "apply the firewall to all swarm nodes")
     .option("--pve-image", "print and, after confirmation, run the pve_template_roll.sh commands for the saved base image")
@@ -191,17 +191,17 @@ export function registerDeploy(admin: Command, getCtx: () => AdminContext): void
         }
       }
 
-      if (opts.service) {
-        console.log(`[service] force updating swarm-1_${opts.service} on manager ${manager.ip}`)
+      for (const service of opts.service ?? []) {
+        console.log(`[service] force updating swarm-1_${service} on manager ${manager.ip}`)
         const cmd = `
-          image=$(${docker} service inspect ${escapeShell(`swarm-1_${opts.service}`)} \\
+          image=$(${docker} service inspect ${escapeShell(`swarm-1_${service}`)} \\
             --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}') || exit $?
           ${docker} service update --force --with-registry-auth \\
-            --image "\${image%@*}" ${escapeShell(`swarm-1_${opts.service}`)}
+            --image "\${image%@*}" ${escapeShell(`swarm-1_${service}`)}
         `
         const rc = await run("ssh", [...SSH_OPTS, "-i", key, at, cmd])
         if (rc !== 0) {
-          throw new Error(`service update failed for ${opts.service} (exit ${rc})`)
+          throw new Error(`service update failed for ${service} (exit ${rc})`)
         }
       }
 
