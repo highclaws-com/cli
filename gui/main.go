@@ -212,7 +212,6 @@ func login() {
 	code.SetPlaceHolder(L("Login code"))
 	failure := widget.NewLabel("")
 	failure.Importance = widget.DangerImportance
-	failure.Hide()
 	var stdin io.WriteCloser
 	var link *url.URL
 	open := newHoverButton(L("Open Browser"), theme.LoginIcon(), func() { a.OpenURL(link) }, mascot.setPointing)
@@ -254,7 +253,6 @@ func login() {
 				} else {
 					failure.SetText(L("Login failed. Please try again."))
 					submit.SetText(L("Login"))
-					failure.Show()
 					code.SetText("")
 					code.Enable()
 					start()
@@ -267,7 +265,7 @@ func login() {
 		submit.Disable()
 		submit.SetText(L("Logging in…"))
 		code.Disable()
-		failure.Hide()
+		failure.SetText("")
 		if _, err := io.WriteString(stdin, code.Text+"\n"); err != nil {
 			panic(err)
 		}
@@ -303,7 +301,7 @@ func login() {
 		code.SetText("")
 		code.Enable()
 		submit.SetText(L("Login"))
-		failure.Hide()
+		failure.SetText("")
 		w.SetPadded(true)
 		w.SetContent(container.NewPadded(container.New(
 			peek{mascot},
