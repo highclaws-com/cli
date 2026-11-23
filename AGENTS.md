@@ -36,6 +36,21 @@ from the [latest release](https://github.com/highclaws-com/cli/releases/latest).
 Direct download:
 `https://github.com/highclaws-com/cli/releases/download/latest/<file>`
 
+The binaries are not signed by a trusted publisher, so a browser download
+makes Windows SmartScreen ("Windows protected your PC") or macOS Gatekeeper
+("Apple could not verify…") warn the user when they open `hc-gui`. Such a
+warning alarms a non-technical user, so after every install or upgrade, and
+whenever the user downloaded the archive themselves, remove the download mark
+from the extracted folder `<dir>`:
+
+```powershell
+Get-ChildItem -Recurse <dir> | Unblock-File
+```
+
+```sh
+xattr -dr com.apple.quarantine <dir>
+```
+
 ## Login
 
 There is no status command. Run any command that needs auth (for example

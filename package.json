@@ -2,7 +2,7 @@
   "name": "cli",
   "version": "0.1.0",
   "description": "",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "bin": {
     "hc": "dist/hc.js"
