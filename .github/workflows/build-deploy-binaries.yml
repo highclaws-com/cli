@@ -55,12 +55,21 @@ jobs:
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev libayatana-appindicator3-dev
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev libayatana-appindicator3-dev patchelf
       - working-directory: gui
         shell: bash
         run: |
           mkdir ../dist
           ${{ matrix.build }}
+      - if: runner.os == 'Linux'
+        working-directory: dist
+        run: |
+          gui=$(ls hc-gui-linux-*)
+          lib=${gui#hc-gui-}/lib
+          mkdir -p "$lib"
+          ldd "$gui" | awk '/lib(ayatana|dbusmenu)/ {print $3}' | xargs -r cp -L -t "$lib"
+          for so in "$lib"/*; do patchelf --set-rpath '$ORIGIN' "$so"; done
+          patchelf --set-rpath '$ORIGIN/lib' "$gui"
       - uses: actions/upload-artifact@v4
         with:
           name: gui-${{ matrix.os }}
@@ -124,11 +133,11 @@ jobs:
             platform=${gui#hc-gui-}
             platform=${platform%.exe}
             ext=${gui#hc-gui-$platform}
-            mkdir $platform
+            mkdir -p $platform
             mv hc-$platform$ext $platform/hc$ext
             mv $gui $platform/hc-gui$ext
             mv hc-proxy-$platform$ext $platform/hc-proxy$ext
-            chmod +x $platform/*
+            chmod +x $platform/hc*
             if [[ $platform == linux-* ]]; then
               (cd "$platform" && tar -czf "../../dist/hc-$platform.tar.gz" *)
             else
