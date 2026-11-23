@@ -337,6 +337,23 @@ Build standalone binaries:
 npm run bin:all
 ```
 
+### GUI
+
+`hc` with no command opens the GUI in `gui/`. Build it with:
+
+```sh
+npm run build
+go -C gui build -o ../dist/hc-gui .
+```
+
+Linux builds need the packages installed in
+`.github/workflows/build-deploy-binaries.yml`. On a Linux system that has
+`libappindicator3` instead of `libayatana-appindicator3`, build it with:
+
+```sh
+go -C gui build -tags legacy_appindicator -o ../dist/hc-gui .
+```
+
 ## Administration
 
 `admin` is tied to a specific repo checkout. It discovers its configuration by

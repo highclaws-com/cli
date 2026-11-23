@@ -3,11 +3,12 @@ package main
 import (
 	"bufio"
 	"embed"
+	"encoding/binary"
 	"io"
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"runtime"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -61,27 +62,28 @@ func switchLanguage(a fyne.App, code string) {
 	a.Quit()
 }
 
+func hc(args ...string) *exec.Cmd {
+	return exec.Command(os.Args[2], append(os.Args[3:], args...)...)
+}
+
 func main() {
 	if err := lang.AddTranslationsFS(translations, "translations"); err != nil {
 		panic(err)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "login" {
-		login(os.Args[2:])
+		login()
 	} else {
 		systray.Run(onReady, nil)
 	}
 }
 
-func icon() []byte {
-	exe, err := os.Executable()
-	if err != nil {
-		panic(err)
+func trayIcon() []byte {
+	if runtime.GOOS != "windows" {
+		return clawNormal
 	}
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(exe), "..", "assets", "hc.png"))
-	if err != nil {
-		panic(err)
-	}
-	return data
+	header := []byte{0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 32, 0, 0, 0, 0, 0, 22, 0, 0, 0}
+	binary.LittleEndian.PutUint32(header[14:], uint32(len(clawNormal)))
+	return append(header, clawNormal...)
 }
 
 func onReady() {
@@ -89,7 +91,7 @@ func onReady() {
 	if err != nil {
 		panic(err)
 	}
-	systray.SetIcon(icon())
+	systray.SetIcon(trayIcon())
 	open := systray.AddMenuItem("HighClaws", "")
 	quit := systray.AddMenuItem(lang.L("Quit"), "")
 	show := func() {
@@ -111,7 +113,7 @@ func onReady() {
 	}()
 }
 
-func login(hc []string) {
+func login() {
 	a := app.NewWithID("hc.gui")
 	if code := a.Preferences().String("language"); code != "" {
 		os.Setenv("LANGUAGE", code)
@@ -119,10 +121,10 @@ func login(hc []string) {
 			panic(err)
 		}
 	}
-	a.Settings().SetTheme(loginTheme{})
-	a.SetIcon(fyne.NewStaticResource("hc.png", icon()))
+	a.Settings().SetTheme(loginTheme{theme.DefaultTheme()})
+	a.SetIcon(fyne.NewStaticResource("cute-claw-normal.png", clawNormal))
 	w := a.NewWindow("HighClaws")
-	sandboxes := newSandboxList(w, hc)
+	sandboxes := newSandboxList(w)
 	mascot := newClaw()
 	code := newCodeEntry(mascot.setTyping)
 	code.SetPlaceHolder(lang.L("Login code"))
@@ -140,7 +142,7 @@ func login(hc []string) {
 
 	var start func()
 	start = func() {
-		cmd := exec.Command(hc[0], append(hc[1:], "auth", "login")...)
+		cmd := hc("auth", "login")
 		var err error
 		stdin, err = cmd.StdinPipe()
 		if err != nil {
@@ -203,27 +205,22 @@ func login(hc []string) {
 	}
 
 	form := container.NewVBox(
-		spacer(8),
+		blank(0, 8),
 		step("1", lang.L("Sign in on the web page")),
 		container.NewCenter(open),
-		spacer(16),
+		blank(0, 16),
 		step("2", lang.L("Paste the login code it shows")),
 		container.NewBorder(nil, nil, nil, submit, code),
 		failure,
-		spacer(8),
+		blank(0, 8),
 		container.NewCenter(languageSelect(a)),
 	)
-	items := make([]*fyne.MenuItem, len(languages))
-	for i, l := range languages {
-		items[i] = fyne.NewMenuItem(l.name, nil)
-	}
-	w.Resize(fyne.NewSize(380, widget.NewMenu(fyne.NewMenu("", items...)).MinSize().Height))
+	w.Resize(fyne.NewSize(380, 0))
 	sandboxes.showLogin = func() {
 		code.SetText("")
 		code.Enable()
 		submit.SetText(lang.L("Login"))
 		failure.Hide()
-		w.SetPadded(true)
 		w.SetContent(container.NewPadded(container.New(peek{}, card(form), mascot.Image, bubble(lang.L("Welcome! I will help you connect to your sandbox.")))))
 		start()
 	}

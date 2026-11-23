@@ -11,16 +11,15 @@
     "node": ">=18"
   },
   "files": [
-    "dist",
-    "bin"
+    "dist"
   ],
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist/hc.js",
     "dev": "npm run build --silent && node dist/hc.js",
     "typecheck": "tsc --noEmit",
-    "bin:linux": "bun build src/index.ts --compile --target=bun-linux-x64 --outfile bin/hc-linux-x64 && bun build src/index.ts --compile --target=bun-linux-arm64 --outfile bin/hc-linux-arm64",
-    "bin:mac": "bun build src/index.ts --compile --target=bun-darwin-x64 --outfile bin/hc-mac-x64 && bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile bin/hc-mac-arm64",
-    "bin:win": "bun build src/index.ts --compile --target=bun-windows-x64 --windows-icon=assets/hc.ico --outfile bin/hc-win.exe",
+    "bin:linux": "bun build src/index.ts --compile --target=bun-linux-x64 --outfile dist/hc-linux-x64 && bun build src/index.ts --compile --target=bun-linux-arm64 --outfile dist/hc-linux-arm64",
+    "bin:mac": "bun build src/index.ts --compile --target=bun-darwin-x64 --outfile dist/hc-mac-x64 && bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile dist/hc-mac-arm64",
+    "bin:win": "bun build src/index.ts --compile --target=bun-windows-x64 --windows-icon=assets/hc.ico --outfile dist/hc-win.exe",
     "bin:all": "npm run bin:linux && npm run bin:mac && npm run bin:win"
   },
   "dependencies": {

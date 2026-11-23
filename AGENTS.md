@@ -22,25 +22,19 @@ it will work, and adjust after they report back. Instant help wins here.
 
 ## Install
 
-If `hc` is not installed, download the binary for the platform from the
-[latest release](https://github.com/highclaws-com/cli/releases/latest):
+If `hc` is not installed, download and extract the archive for the platform
+from the [latest release](https://github.com/highclaws-com/cli/releases/latest).
 
 | Platform | File |
 | --- | --- |
-| Linux x64 | `hc-linux-x64` |
-| Linux arm64 | `hc-linux-arm64` |
-| macOS Intel | `hc-mac-x64` |
-| macOS Apple silicon | `hc-mac-arm64` |
-| Windows x64 | `hc-win.exe` |
+| Linux x64 | `hc-linux-x64.tar.gz` |
+| Linux arm64 | `hc-linux-arm64.tar.gz` |
+| macOS Intel | `hc-mac-x64.zip` |
+| macOS Apple silicon | `hc-mac-arm64.zip` |
+| Windows x64 | `hc-win.zip` |
 
 Direct download:
 `https://github.com/highclaws-com/cli/releases/download/latest/<file>`
-
-On Linux and macOS, make it executable after downloading:
-
-```sh
-chmod +x <file>
-```
 
 ## Login
 

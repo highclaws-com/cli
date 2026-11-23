@@ -157,14 +157,12 @@ func bubble(text string) fyne.CanvasObject {
 	shape.ScaleMode = canvas.ImageScalePixels
 	label := widget.NewLabelWithStyle(text, fyne.TextAlignLeading, fyne.TextStyle{Bold: true, Monospace: true})
 	label.Wrapping = fyne.TextWrapWord
-	tail := canvas.NewRectangle(color.Transparent)
-	tail.SetMinSize(fyne.NewSize(3*px, 0))
-	return container.NewStack(shape, container.NewBorder(nil, nil, nil, tail, label))
+	return container.NewStack(shape, container.NewBorder(nil, nil, nil, blank(3*px, 0), label))
 }
 
-func spacer(height float32) fyne.CanvasObject {
+func blank(width, height float32) fyne.CanvasObject {
 	gap := canvas.NewRectangle(color.Transparent)
-	gap.SetMinSize(fyne.NewSize(0, height))
+	gap.SetMinSize(fyne.NewSize(width, height))
 	return gap
 }
 

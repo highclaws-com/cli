@@ -4,12 +4,10 @@ import { run } from "../exec"
 
 export function registerGui(program: Command): void {
   program
-    .command("gui")
-    .description("show the tray icon")
+    .command("gui", { isDefault: true })
+    .description("open the GUI")
     .action(async () => {
-      process.exit(await run(
-        path.join(__dirname, "..", "bin", "hc-gui"),
-        [process.execPath, process.argv[1]]
-      ))
+      const hc = process.versions.bun ? [process.execPath] : [process.execPath, __filename]
+      process.exit(await run(path.join(path.dirname(hc.at(-1)!), "hc-gui"), hc))
     })
 }
