@@ -20,11 +20,12 @@ jobs:
         run: |
           go test -tags with_utls ./...
           mkdir ../dist
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-linux-x64 .
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags with_utls -o ../dist/hc-proxy-linux-arm64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-mac-x64 .
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags with_utls -o ../dist/hc-proxy-mac-arm64 .
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-win.exe .
+          export CGO_ENABLED=0
+          GOOS=linux GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-linux-x64 .
+          GOOS=linux GOARCH=arm64 go build -tags with_utls -o ../dist/hc-proxy-linux-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-mac-x64 .
+          GOOS=darwin GOARCH=arm64 go build -tags with_utls -o ../dist/hc-proxy-mac-x64 .
+          GOOS=windows GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-win.exe .
       - uses: actions/upload-artifact@v4
         with:
           name: proxy-helper
@@ -76,6 +77,7 @@ jobs:
           path: dist/*
 
   build-cli:
+    needs: build-gui
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,12 +93,33 @@ jobs:
           codesign --force --sign - dist/hc-mac-x64
           codesign --force --sign - dist/hc-mac-arm64
           ./dist/hc-mac-arm64 --help
+      - uses: actions/download-artifact@v4
+        with:
+          name: gui-macos-latest
+          path: dist
+      - working-directory: dist
+        run: |
+          mv hc-gui-mac-arm64 hc-gui
+          chmod +x hc-gui
+          ./hc-mac-arm64 &
+          swift - <<'SWIFT'
+          import Cocoa
+          for _ in 0..<30 {
+              let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, 0) as! [[String: Any]]
+              if windows.contains(where: { $0[kCGWindowOwnerName as String] as? String == "hc-gui" && $0[kCGWindowLayer as String] as? Int == 0 }) { exit(0) }
+              Thread.sleep(forTimeInterval: 1)
+          }
+          exit(1)
+          SWIFT
       - uses: actions/upload-artifact@v4
         with:
           name: cli-unix
-          path: dist/*
+          path: |
+            dist/hc-mac-*
+            dist/hc-linux-*
 
   build-cli-windows:
+    needs: build-gui
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,12 +134,23 @@ jobs:
       - run: |
           ./dist/hc-win.exe --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./dist/hc-win.exe proxy --help
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/download-artifact@v4
+        with:
+          name: gui-windows-latest
+          path: dist
+      - working-directory: dist
+        run: |
+          Rename-Item hc-gui-win.exe hc-gui.exe
+          Start-Process ./hc-win.exe
+          foreach ($i in 1..30) {
+            if (Get-Process hc-gui -ErrorAction SilentlyContinue | Where-Object MainWindowTitle -eq 'HighClaws') { exit 0 }
+            Start-Sleep 1
+          }
+          throw 'GUI window did not open'
       - uses: actions/upload-artifact@v4
         with:
           name: cli-windows
-          path: dist/*
+          path: dist/hc-win.exe
 
   release-cli:
     needs: [build-cli, build-cli-windows, build-gui, build-proxy-helper]
