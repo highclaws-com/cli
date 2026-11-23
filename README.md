@@ -327,11 +327,11 @@ npm link
 hc <command>
 ```
 
-Build the GUI and proxy helper alongside `hc`:
+Build everything locally on Linux and launch the GUI with
 
 ```sh
-go -C gui build -o ../dist/hc-gui .
-go -C proxy-helper build -tags with_utls -o ../dist/hc-proxy .
+npm run build:local
+./dist/hc
 ```
 
 Build standalone binaries:
@@ -341,8 +341,8 @@ npm run bin:all
 ```
 
 On Linux, the GUI needs the packages installed in
-`.github/workflows/build-deploy-binaries.yml`. With `libappindicator3` instead
-of `libayatana-appindicator3`, build it with `-tags legacy_appindicator`.
+`.github/workflows/build-deploy-binaries.yml`. The local build also supports
+`libappindicator3`.
 
 ## Administration
 
