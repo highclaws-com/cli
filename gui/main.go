@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 
 	"fyne.io/fyne/v2"
@@ -17,6 +18,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/getlantern/systray"
+	"github.com/shirou/gopsutil/v4/process"
 	"golang.org/x/text/language"
 )
 
@@ -71,10 +73,48 @@ func main() {
 		panic(err)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "login" {
+		for _, p := range others(true) {
+			p.Kill()
+		}
 		login()
+	} else if len(others(false)) > 0 {
+		show()
 	} else {
 		systray.Run(onReady, nil)
 	}
+}
+
+func others(window bool) []*process.Process {
+	exe, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	processes, err := process.Processes()
+	if err != nil {
+		panic(err)
+	}
+	var found []*process.Process
+	for _, p := range processes {
+		name, _ := p.Name()
+		args, _ := p.CmdlineSlice()
+		isWindow := len(args) > 1 && args[1] == "login"
+		if name == filepath.Base(exe) && p.Pid != int32(os.Getpid()) && isWindow == window {
+			found = append(found, p)
+		}
+	}
+	return found
+}
+
+func show() {
+	exe, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	cmd := exec.Command(exe, append([]string{"login"}, os.Args[1:]...)...)
+	if err := cmd.Start(); err != nil {
+		panic(err)
+	}
+	go cmd.Wait()
 }
 
 func trayIcon() []byte {
@@ -87,20 +127,9 @@ func trayIcon() []byte {
 }
 
 func onReady() {
-	exe, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
 	systray.SetIcon(trayIcon())
 	open := systray.AddMenuItem("HighClaws", "")
 	quit := systray.AddMenuItem(lang.L("Quit"), "")
-	show := func() {
-		cmd := exec.Command(exe, append([]string{"login"}, os.Args[1:]...)...)
-		if err := cmd.Start(); err != nil {
-			panic(err)
-		}
-		go cmd.Wait()
-	}
 	show()
 	go func() {
 		for range open.ClickedCh {
@@ -124,6 +153,7 @@ func login() {
 	a.Settings().SetTheme(loginTheme{theme.DefaultTheme()})
 	a.SetIcon(fyne.NewStaticResource("cute-claw-normal.png", clawNormal))
 	w := a.NewWindow("HighClaws")
+	w.SetFixedSize(true)
 	sandboxes := newSandboxList(w)
 	mascot := newClaw()
 	code := newCodeEntry(mascot.setTyping)
