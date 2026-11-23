@@ -4,6 +4,36 @@
 
 HighClaws CLI: A CLI tool for exposing your local machine to HighClaws sandboxes, syncing files, and proxying cloud browser egress, etc.
 
+## Quick Start
+
+Get the file for your computer from the
+[download page](https://github.com/highclaws-com/cli/releases/latest).
+It is a rolling release, updated together with the HighClaws website, so what
+you download should always work with the service you use today.
+
+| Computer | File |
+| --- | --- |
+| Windows | `hc-win.zip` |
+| Mac with Apple chip (M1 or later) | `hc-mac-arm64.zip` |
+| Mac with Intel chip | `hc-mac-x64.zip` |
+| Linux x64 | `hc-linux-x64.tar.gz` |
+| Linux arm64 | `hc-linux-arm64.tar.gz` |
+
+Unzip it and double-click `hc-gui` to open the GUI. On first open, Windows
+needs **More info → Run anyway**, and macOS needs **System Settings → Privacy &
+Security → Open Anyway**.
+
+> [!NOTE]
+> We rely on transparency rather than a paid signing certificate for trust:
+> every file is built by GitHub from the open source code in this repo, with
+> [public build logs](https://github.com/highclaws-com/cli/actions).
+
+The GUI does one thing: connect this computer to your sandbox. Through that
+connection, your cloud agent can do everything `hc` does for you; just ask it.
+
+For manual operation and the full feature set, use `hc`, the command-line
+tool described below.
+
 ## Usage
 
 ```sh
