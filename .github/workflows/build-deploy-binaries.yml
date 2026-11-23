@@ -20,17 +20,15 @@ jobs:
         run: |
           go test -tags with_utls ./...
           mkdir ../dist
-          GOOS=linux GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-linux-amd64 .
-          GOOS=linux GOARCH=arm64 go build -tags with_utls -o ../dist/hc-proxy-linux-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-darwin-amd64 .
-          GOOS=darwin GOARCH=arm64 go build -tags with_utls -o ../dist/hc-proxy-darwin-arm64 .
-          GOOS=windows GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-windows-amd64.exe .
-      - uses: softprops/action-gh-release@v2
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-linux-x64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags with_utls -o ../dist/hc-proxy-linux-arm64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-mac-x64 .
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags with_utls -o ../dist/hc-proxy-mac-arm64 .
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags with_utls -o ../dist/hc-proxy-win.exe .
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: proxy-helper
-          name: Proxy helper
-          prerelease: true
-          files: dist/*
+          name: proxy-helper
+          path: dist/*
 
   build-gui:
     strategy:
@@ -112,7 +110,7 @@ jobs:
           path: dist/*
 
   release-cli:
-    needs: [build-cli, build-cli-windows, build-gui]
+    needs: [build-cli, build-cli-windows, build-gui, build-proxy-helper]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -129,6 +127,7 @@ jobs:
             mkdir $platform
             mv hc-$platform$ext $platform/hc$ext
             mv $gui $platform/hc-gui$ext
+            mv hc-proxy-$platform$ext $platform/hc-proxy$ext
             chmod +x $platform/*
             if [[ $platform == linux-* ]]; then
               (cd "$platform" && tar -czf "../../dist/hc-$platform.tar.gz" *)

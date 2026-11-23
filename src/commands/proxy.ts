@@ -5,8 +5,8 @@ import {
   getUserConfig,
   updateUserConfig
 } from "../config"
+import { siblingBin } from "../exec"
 import { askSecrets } from "../output"
-import { ensureProxyHelper } from "../proxy-helper"
 
 function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publicKey"> {
   const output = execFileSync(helper, ["keygen"], {
@@ -22,10 +22,10 @@ function generateKeypair(helper: string): Pick<ProxyConfig, "privateKey" | "publ
 
 async function proxy(
   options: {
-    reset: boolean; upgrade: boolean; quiet?: boolean; endpoint?: string; sandboxKey?: string
+    reset: boolean; quiet?: boolean; endpoint?: string; sandboxKey?: string
   }
 ): Promise<void> {
-  const helper = await ensureProxyHelper(options.upgrade)
+  const helper = siblingBin("hc-proxy")
   if (options.reset) updateUserConfig("proxy", undefined)
   const saved = getUserConfig("proxy")
   // --endpoint and --sandbox-key override the saved values. Missing values are
@@ -82,7 +82,6 @@ export function registerProxy(program: Command): void {
   program
     .command("proxy")
     .description("proxy sandbox browser egress through this computer")
-    .option("--upgrade", "download the latest proxy helper")
     .option("--reset", "reset the saved configuration and client key")
     .option("--endpoint <ip:port>", "the Server WireGuard Endpoint, used instead of the saved one")
     .option("--sandbox-key <key>", "the Sandbox WireGuard Public Key, used instead of the saved one")

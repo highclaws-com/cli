@@ -5,9 +5,8 @@ import os from "node:os"
 import path from "node:path"
 import { Command } from "commander"
 import { USER_CACHE_DIR, USER_CONFIG_PATH, getUserConfig, updateUserConfig } from "../config"
-import { run } from "../exec"
+import { run, siblingBin } from "../exec"
 import { askSecrets } from "../output"
-import { ensureProxyHelper } from "../proxy-helper"
 import { sandboxIdByName, tunnelEndpoint } from "./sandbox"
 
 // Sandbox TCP port of the SSH server that accepts the reverse forward.
@@ -35,9 +34,9 @@ const RETRY_MAX_MS = 10 * 60 * 1000
 async function safeExpose(
   sandbox: string | undefined,
   tunnel: string | undefined,
-  options: { reset?: boolean; upgrade?: boolean }
+  options: { reset?: boolean }
 ): Promise<void> {
-  const helper = await ensureProxyHelper(options.upgrade)
+  const helper = siblingBin("hc-proxy")
   if (!sandbox) {
     const saved = options.reset ? undefined : getUserConfig("reverse_ssh")?.endpoint
     const endpoint = saved ?? (await askSecrets(["Endpoint"]))[0]
@@ -161,6 +160,5 @@ export function registerSafeExpose(program: Command): void {
         "name, keep reconnecting as tunnel <tunnel> (default: this hostname)"
     )
     .option("--reset", "ask for a new endpoint instead of the saved one")
-    .option("--upgrade", "download the latest proxy helper")
     .action(safeExpose)
 }

@@ -91,8 +91,7 @@ passed as arguments; see Secret values in [AGENTS.md](AGENTS.md).
 `<host>` is the HOST column of `hc sandbox ls`. The CLI adds the domain.
 
 The user config file (`~/.config/highclaws/config.json` on Linux) can set
-`"domain"` (default `highclaws.com`) and `"github_org"`, where the proxy helper
-is downloaded from (default `highclaws-com`).
+`"domain"` (default `highclaws.com`).
 
 ## Windows setup
 
@@ -328,10 +327,11 @@ npm link
 hc <command>
 ```
 
-Build the GUI, which `hc` with no command opens:
+Build the GUI and proxy helper alongside `hc`:
 
 ```sh
 go -C gui build -o ../dist/hc-gui .
+go -C proxy-helper build -tags with_utls -o ../dist/hc-proxy .
 ```
 
 Build standalone binaries:

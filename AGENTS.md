@@ -74,17 +74,11 @@ hc sandbox get-endpoint <id> laptop | hc safe-expose
 
 ## Downloaded tools
 
-`hc` downloads the tools it runs on first use and keeps using that copy:
-rclone (`hc sync mount`), cloudflared (`hc expose`), and the proxy helper
-(`hc proxy`, `hc safe-expose`, `hc safe-forward`). Add `--upgrade` to any of
-those commands to download the latest; every later command uses it.
+`hc` downloads third-party tools it runs on first use and keeps using that copy:
+rclone (`hc sync mount`) and cloudflared (`hc expose`). Add `--upgrade` to
+either command to download the latest; every later command uses it.
 
-```sh
-hc safe-expose --upgrade
-```
-
-After updating `hc` itself, run one proxy helper command with `--upgrade`: an
-older helper fails with `unknown command "ssh-tunnel"`.
+`hc-gui` and `hc-proxy` are bundled alongside `hc` in the release archive.
 
 ## Sandbox discovery
 

@@ -1,4 +1,11 @@
+import fs from "node:fs"
+import path from "node:path"
 import { spawn } from "node:child_process"
+
+export function siblingBin(name: string): string {
+  const self = fs.realpathSync(process.versions.bun ? process.execPath : __filename)
+  return path.join(path.dirname(self), process.platform === "win32" ? `${name}.exe` : name)
+}
 
 export interface RunOptions {
   cwd?: string
