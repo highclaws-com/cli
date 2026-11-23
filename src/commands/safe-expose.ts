@@ -37,6 +37,7 @@ async function safeExpose(
   options: { reset?: boolean }
 ): Promise<void> {
   const helper = siblingBin("hc-proxy")
+  fs.accessSync(helper, fs.constants.X_OK)
   if (!sandbox) {
     const saved = options.reset ? undefined : getUserConfig("reverse_ssh")?.endpoint
     const endpoint = saved ?? (await askSecrets(["Endpoint"]))[0]
