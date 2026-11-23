@@ -163,9 +163,12 @@ jobs:
               (cd "$platform" && zip -ry "../../dist/hc-$platform.zip" .)
             fi
           done
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: HighClaws CLI
-          prerelease: false
-          files: dist/*
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view latest > /dev/null 2>&1; then
+            gh release delete latest --cleanup-tag --yes
+          fi
+          gh release create latest dist/* \
+            --title "HighClaws CLI" --notes "" --target ${{ github.sha }}
