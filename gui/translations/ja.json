@@ -20,6 +20,5 @@
   "Log out": "ログアウト",
   "Failed to load sandboxes.": "サンドボックスを読み込めませんでした。",
   "Failed to load tunnels.": "トンネルを読み込めませんでした。",
-  "No tunnels yet.": "トンネルはまだありません。",
   "Retry": "再試行"
 }

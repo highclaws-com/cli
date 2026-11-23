@@ -20,6 +20,5 @@
   "Log out": "退出登录",
   "Failed to load sandboxes.": "沙箱加载失败。",
   "Failed to load tunnels.": "隧道加载失败。",
-  "No tunnels yet.": "还没有隧道。",
   "Retry": "重试"
 }

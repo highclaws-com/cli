@@ -20,6 +20,5 @@
   "Log out": "로그아웃",
   "Failed to load sandboxes.": "샌드박스를 불러오지 못했습니다.",
   "Failed to load tunnels.": "터널을 불러오지 못했습니다.",
-  "No tunnels yet.": "아직 터널이 없습니다.",
   "Retry": "다시 시도"
 }

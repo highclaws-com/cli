@@ -20,6 +20,5 @@
   "Log out": "Cerrar sesión",
   "Failed to load sandboxes.": "No se pudieron cargar los sandboxes.",
   "Failed to load tunnels.": "No se pudieron cargar los túneles.",
-  "No tunnels yet.": "Aún no hay túneles.",
   "Retry": "Reintentar"
 }

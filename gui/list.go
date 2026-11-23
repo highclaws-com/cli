@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
+	"os"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -35,11 +36,13 @@ func svgIcon(name, path string) fyne.Resource {
 type sandbox struct {
 	ProvisionID any    `json:"provision_id"`
 	Name        string `json:"name"`
-	Clients     []struct {
-		Name      string `json:"name"`
-		Connected bool   `json:"connected"`
-	}
-	ClientsErr error
+	Clients     []tunnelClient
+	ClientsErr  error
+}
+
+type tunnelClient struct {
+	Name      string `json:"name"`
+	Connected bool   `json:"connected"`
 }
 
 type sandboxList struct {
@@ -165,8 +168,11 @@ func (l *sandboxList) show(sandboxes []sandbox, pages int, tunnels map[[2]string
 		if s.ClientsErr != nil {
 			rows = append(rows, indented(l.retryRow(lang.L("Failed to load tunnels."), l.page)))
 		} else if len(s.Clients) == 0 {
-			none := widget.NewLabel(lang.L("No tunnels yet."))
-			rows = append(rows, indented(none))
+			hostname, err := os.Hostname()
+			if err != nil {
+				panic(err)
+			}
+			s.Clients = []tunnelClient{{Name: hostname}}
 		}
 		for _, client := range s.Clients {
 			key := [2]string{s.Name, client.Name}
