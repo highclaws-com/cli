@@ -154,25 +154,27 @@ func (l *sandboxList) fetchPage(page, generation int, failed func()) {
 }
 
 func (l *sandboxList) show(sandboxes []sandbox, pages int, tunnels map[[2]string]*process.Process) {
-	l.rows.RemoveAll()
+	var rows []fyne.CanvasObject
 	if len(sandboxes) == 0 {
-		l.placeholder(lang.L("No sandboxes yet."))
+		rows = append(rows, widget.NewLabelWithStyle(lang.L("No sandboxes yet."), fyne.TextAlignCenter, fyne.TextStyle{}))
 	}
 	for _, s := range sandboxes {
 		name := widget.NewLabelWithStyle(s.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 		name.SizeName = theme.SizeNameHeadingText
-		l.rows.Add(container.NewHBox(widget.NewIcon(boxIcon), name))
+		rows = append(rows, container.NewHBox(widget.NewIcon(boxIcon), name))
 		if s.ClientsErr != nil {
-			l.rows.Add(indented(l.retryRow(lang.L("Failed to load tunnels."), l.page)))
+			rows = append(rows, indented(l.retryRow(lang.L("Failed to load tunnels."), l.page)))
 		} else if len(s.Clients) == 0 {
 			none := widget.NewLabel(lang.L("No tunnels yet."))
-			l.rows.Add(indented(none))
+			rows = append(rows, indented(none))
 		}
 		for _, client := range s.Clients {
 			key := [2]string{s.Name, client.Name}
-			l.rows.Add(l.tunnelRow(key, client.Connected, tunnels[key]))
+			rows = append(rows, l.tunnelRow(key, client.Connected, tunnels[key]))
 		}
 	}
+	l.rows.Objects = rows
+	l.rows.Refresh()
 	if pages > 1 {
 		l.label.SetText(fmt.Sprintf("%d / %d", l.page, pages))
 		l.bar.Show()
