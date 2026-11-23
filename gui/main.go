@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"embed"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"net/url"
 	"os"
@@ -38,28 +39,62 @@ var languages = []struct{ code, name string }{
 	{"pt", "Português"},
 }
 
-func languageSelect(a fyne.App) *widget.Select {
-	names := make([]string, len(languages))
+var translation map[string]string
+
+func L(text string) string {
+	if t, ok := translation[text]; ok {
+		return t
+	}
+	return text
+}
+
+func systemLanguage() string {
 	tags := make([]language.Tag, len(languages))
 	for i, l := range languages {
-		names[i] = l.name
 		tags[i] = language.Make(l.code)
 	}
+	_, i, _ := language.NewMatcher(tags).Match(language.Make(lang.SystemLocale().String()))
+	return languages[i].code
+}
+
+func chosenLanguage(a fyne.App) string {
+	return a.Preferences().StringWithFallback("language", systemLanguage())
+}
+
+func useLanguage(code string) {
+	if code != "en" {
+		data, err := translations.ReadFile("translations/" + code + ".json")
+		if err != nil {
+			panic(err)
+		}
+		if err := json.Unmarshal(data, &translation); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func languageSelect(a fyne.App, code string) *widget.Select {
+	names := make([]string, len(languages))
+	selected := ""
+	for i, l := range languages {
+		names[i] = l.name
+		if l.code == code {
+			selected = l.name
+		}
+	}
 	sel := widget.NewSelect(names, nil)
-	_, current, _ := language.NewMatcher(tags).Match(language.Make(lang.SystemLocale().String()))
-	sel.Selected = names[current]
+	sel.Selected = selected
 	sel.OnChanged = func(string) { switchLanguage(a, languages[sel.SelectedIndex()].code) }
 	return sel
 }
 
 func switchLanguage(a fyne.App, code string) {
 	a.Preferences().SetString("language", code)
-	os.Setenv("LANGUAGE", code)
 	exe, err := os.Executable()
 	if err != nil {
 		panic(err)
 	}
-	if err := exec.Command(exe, os.Args[1:]...).Start(); err != nil {
+	if err := exec.Command(exe).Start(); err != nil {
 		panic(err)
 	}
 	a.Quit()
@@ -84,13 +119,11 @@ func hc(args ...string) *exec.Cmd {
 }
 
 func main() {
-	if err := lang.AddTranslationsFS(translations, "translations"); err != nil {
-		panic(err)
-	}
 	killAll(false)
 	if len(os.Args) > 1 && os.Args[1] == "login" {
 		login()
 	} else {
+		useLanguage(chosenLanguage(app.NewWithID("hc.gui")))
 		runTray(onReady, nil)
 	}
 }
@@ -151,7 +184,7 @@ func trayIcon() []byte {
 func onReady() {
 	setTrayIcon(trayIcon())
 	open := addMenuItem("HighClaws", "")
-	quit := addMenuItem(lang.L("Quit"), "")
+	quit := addMenuItem(L("Quit"), "")
 	show()
 	go func() {
 		for range open.ClickedCh {
@@ -167,12 +200,8 @@ func onReady() {
 
 func login() {
 	a := app.NewWithID("hc.gui")
-	if code := a.Preferences().String("language"); code != "" {
-		os.Setenv("LANGUAGE", code)
-		if err := lang.AddTranslationsFS(translations, "translations"); err != nil {
-			panic(err)
-		}
-	}
+	languageCode := chosenLanguage(a)
+	useLanguage(languageCode)
 	a.Settings().SetTheme(loginTheme{theme.DefaultTheme()})
 	a.SetIcon(fyne.NewStaticResource("cute-claw-normal.png", clawNormal))
 	w := a.NewWindow("HighClaws")
@@ -180,16 +209,16 @@ func login() {
 	sandboxes := newSandboxList(w)
 	mascot := newClaw()
 	code := newCodeEntry(mascot.setTyping)
-	code.SetPlaceHolder(lang.L("Login code"))
+	code.SetPlaceHolder(L("Login code"))
 	failure := widget.NewLabel("")
 	failure.Importance = widget.DangerImportance
 	failure.Hide()
 	var stdin io.WriteCloser
 	var link *url.URL
-	open := newHoverButton(lang.L("Open Browser"), theme.LoginIcon(), func() { a.OpenURL(link) }, mascot.setPointing)
+	open := newHoverButton(L("Open Browser"), theme.LoginIcon(), func() { a.OpenURL(link) }, mascot.setPointing)
 	open.Importance = widget.HighImportance
 	open.Disable()
-	submit := widget.NewButton(lang.L("Login"), nil)
+	submit := widget.NewButton(L("Login"), nil)
 	submit.Importance = widget.HighImportance
 	submit.Disable()
 
@@ -223,8 +252,8 @@ func login() {
 				if err == nil {
 					sandboxes.load(1, nil)
 				} else {
-					failure.SetText(lang.L("Login failed. Please try again."))
-					submit.SetText(lang.L("Login"))
+					failure.SetText(L("Login failed. Please try again."))
+					submit.SetText(L("Login"))
 					failure.Show()
 					code.SetText("")
 					code.Enable()
@@ -236,7 +265,7 @@ func login() {
 
 	submit.OnTapped = func() {
 		submit.Disable()
-		submit.SetText(lang.L("Logging in…"))
+		submit.SetText(L("Logging in…"))
 		code.Disable()
 		failure.Hide()
 		if _, err := io.WriteString(stdin, code.Text+"\n"); err != nil {
@@ -259,28 +288,28 @@ func login() {
 
 	form := container.NewVBox(
 		blank(0, 8),
-		step("1", lang.L("Sign in on the web page")),
+		step("1", L("Sign in on the web page")),
 		container.NewCenter(container.NewThemeOverride(open, loginActionTheme{a.Settings().Theme()})),
 		blank(0, 16),
-		step("2", lang.L("Paste the login code it shows")),
+		step("2", L("Paste the login code it shows")),
 		container.NewBorder(nil, nil, nil, submit, code),
 		failure,
 		footerGap(),
-		container.NewCenter(languageSelect(a)),
+		container.NewCenter(languageSelect(a, languageCode)),
 		blank(0, 8),
 	)
 	w.Resize(fyne.NewSize(380, 0))
 	sandboxes.showLogin = func() {
 		code.SetText("")
 		code.Enable()
-		submit.SetText(lang.L("Login"))
+		submit.SetText(L("Login"))
 		failure.Hide()
 		w.SetPadded(true)
 		w.SetContent(container.NewPadded(container.New(
 			peek{mascot},
 			card(form),
 			mascot.Image,
-			bubble(lang.L("Welcome! I will help you connect to your sandbox.")),
+			bubble(L("Welcome! I will help you connect to your sandbox.")),
 		)))
 		start()
 	}

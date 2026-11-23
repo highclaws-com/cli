@@ -13,7 +13,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/shirou/gopsutil/v4/process"
@@ -74,11 +73,11 @@ func newSandboxList(w fyne.Window) *sandboxList {
 	l := &sandboxList{w: w, stopping: map[[2]string]bool{}, failures: map[[2]string]bool{}}
 	l.rows = container.NewVBox()
 	l.label = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	l.prev = widget.NewButtonWithIcon(lang.L("Previous"), theme.NavigateBackIcon(), func() { l.load(l.page-1, nil) })
-	l.next = widget.NewButtonWithIcon(lang.L("Next"), theme.NavigateNextIcon(), func() { l.load(l.page+1, nil) })
+	l.prev = widget.NewButtonWithIcon(L("Previous"), theme.NavigateBackIcon(), func() { l.load(l.page-1, nil) })
+	l.next = widget.NewButtonWithIcon(L("Next"), theme.NavigateNextIcon(), func() { l.load(l.page+1, nil) })
 	l.next.IconPlacement = widget.ButtonIconTrailingText
 	l.bar = container.NewCenter(container.NewHBox(l.prev, l.label, l.next))
-	logout := widget.NewHyperlink(lang.L("Log out"), nil)
+	logout := widget.NewHyperlink(L("Log out"), nil)
 	logout.SizeName = theme.SizeNameCaptionText
 	logout.OnTapped = func() {
 		go func() {
@@ -123,7 +122,7 @@ func (l *sandboxList) placeholder(text string) {
 func (l *sandboxList) load(page int, failed func()) {
 	l.generation++
 	l.page = 0
-	l.placeholder(lang.L("Loading…"))
+	l.placeholder(L("Loading…"))
 	l.bar.Hide()
 	l.w.SetPadded(false)
 	l.w.SetContent(l.content)
@@ -154,7 +153,7 @@ func (l *sandboxList) fetchPage(page, generation int, failed func()) {
 		if err != nil && failed != nil {
 			failed()
 		} else if err != nil {
-			l.rows.Objects = []fyne.CanvasObject{l.retryRow(lang.L("Failed to load sandboxes."), page)}
+			l.rows.Objects = []fyne.CanvasObject{l.retryRow(L("Failed to load sandboxes."), page)}
 			l.rows.Refresh()
 			l.fitHeight()
 		} else {
@@ -172,14 +171,14 @@ func (l *sandboxList) fetchPage(page, generation int, failed func()) {
 func (l *sandboxList) show(sandboxes []sandbox, pages int, tunnels map[[2]string]*process.Process) {
 	var rows []fyne.CanvasObject
 	if len(sandboxes) == 0 {
-		rows = append(rows, widget.NewLabelWithStyle(lang.L("No sandboxes yet."), fyne.TextAlignCenter, fyne.TextStyle{}))
+		rows = append(rows, widget.NewLabelWithStyle(L("No sandboxes yet."), fyne.TextAlignCenter, fyne.TextStyle{}))
 	}
 	for _, s := range sandboxes {
 		name := widget.NewLabelWithStyle(s.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 		name.SizeName = theme.SizeNameHeadingText
 		rows = append(rows, container.NewHBox(widget.NewIcon(boxIcon), name))
 		if s.ClientsErr != nil {
-			rows = append(rows, indented(l.retryRow(lang.L("Failed to load tunnels."), l.page)))
+			rows = append(rows, indented(l.retryRow(L("Failed to load tunnels."), l.page)))
 		}
 		for _, client := range s.Clients {
 			key := [2]string{s.Name, client.Name}
@@ -217,7 +216,7 @@ func (l *sandboxList) fitHeight() {
 
 func (l *sandboxList) tunnelRow(key [2]string, connected bool, p *process.Process) fyne.CanvasObject {
 	toggle := widget.NewButton("", nil)
-	failure := widget.NewLabel(lang.L("Connection failed."))
+	failure := widget.NewLabel(L("Connection failed."))
 	failure.Importance = widget.DangerImportance
 	if connected {
 		delete(l.failures, key)
@@ -228,7 +227,7 @@ func (l *sandboxList) tunnelRow(key [2]string, connected bool, p *process.Proces
 	paint := func() {
 		running := p != nil
 		if l.stopping[key] && (running || connected) {
-			toggle.SetText(lang.L("Disconnecting…"))
+			toggle.SetText(L("Disconnecting…"))
 			toggle.SetIcon(theme.ViewRefreshIcon())
 			toggle.Importance = widget.MediumImportance
 			toggle.Disable()
@@ -237,15 +236,15 @@ func (l *sandboxList) tunnelRow(key [2]string, connected bool, p *process.Proces
 		delete(l.stopping, key)
 		toggle.Enable()
 		if !running {
-			toggle.SetText(lang.L("Connect"))
+			toggle.SetText(L("Connect"))
 			toggle.SetIcon(linkIcon)
 			toggle.Importance = widget.MediumImportance
 		} else if !connected {
-			toggle.SetText(lang.L("Connecting…"))
+			toggle.SetText(L("Connecting…"))
 			toggle.SetIcon(theme.ViewRefreshIcon())
 			toggle.Importance = widget.MediumImportance
 		} else {
-			toggle.SetText(lang.L("Disconnect"))
+			toggle.SetText(L("Disconnect"))
 			toggle.SetIcon(unlinkIcon)
 			toggle.Importance = widget.DangerImportance
 		}
@@ -296,7 +295,7 @@ func indented(content fyne.CanvasObject) fyne.CanvasObject {
 func (l *sandboxList) retryRow(text string, page int) fyne.CanvasObject {
 	failure := widget.NewLabel(text)
 	failure.Importance = widget.DangerImportance
-	retry := widget.NewHyperlink(lang.L("Retry"), nil)
+	retry := widget.NewHyperlink(L("Retry"), nil)
 	retry.OnTapped = func() { l.load(page, nil) }
 	return container.NewHBox(failure, retry)
 }
