@@ -115,6 +115,13 @@ func newHoverButton(label string, icon fyne.Resource, tapped func(), onHover fun
 	return b
 }
 
+func (b *hoverButton) Cursor() desktop.Cursor {
+	if b.Disabled() {
+		return desktop.DefaultCursor
+	}
+	return desktop.PointerCursor
+}
+
 func (b *hoverButton) MouseIn(e *desktop.MouseEvent) {
 	b.Button.MouseIn(e)
 	b.onHover(true)
@@ -127,7 +134,6 @@ func (b *hoverButton) MouseOut() {
 
 func bubble(text string) fyne.CanvasObject {
 	const px = 4
-	ink := color.NRGBA{0x0f, 0x17, 0x2a, 0xff}
 	shape := canvas.NewRaster(func(width, height int) image.Image {
 		w, h := width/px-3, height/px
 		mid := h/2 - 1
@@ -155,7 +161,7 @@ func bubble(text string) fyne.CanvasObject {
 		return cells
 	})
 	shape.ScaleMode = canvas.ImageScalePixels
-	label := widget.NewLabelWithStyle(text, fyne.TextAlignLeading, fyne.TextStyle{Bold: true, Monospace: true})
+	label := widget.NewLabel(text)
 	label.Wrapping = fyne.TextWrapWord
 	return container.NewStack(shape, container.NewBorder(nil, nil, nil, blank(3*px, 0), label))
 }
@@ -166,9 +172,14 @@ func blank(width, height float32) fyne.CanvasObject {
 	return gap
 }
 
+func footerGap() fyne.CanvasObject {
+	const footerPaddingUnits = 4
+	return blank(0, footerPaddingUnits*theme.Padding())
+}
+
 func step(number string, text string) fyne.CanvasObject {
-	circle := canvas.NewCircle(color.NRGBA{0x08, 0x91, 0xb2, 0xff})
-	digit := canvas.NewText(number, color.White)
+	circle := canvas.NewCircle(theme.Color(theme.ColorNamePrimary))
+	digit := canvas.NewText(number, theme.Color(theme.ColorNameForegroundOnPrimary))
 	digit.TextStyle.Bold = true
 	badge := container.NewGridWrap(
 		fyne.NewSquareSize(22),

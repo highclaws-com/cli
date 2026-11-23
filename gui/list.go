@@ -16,7 +16,7 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-const pageSize = 3
+const pageSize = 2
 
 const chain = "M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM17 7h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"
 
@@ -62,9 +62,10 @@ type sandboxList struct {
 func newSandboxList(w fyne.Window) *sandboxList {
 	l := &sandboxList{w: w, connected: map[[2]string]bool{}, stopping: map[[2]string]bool{}}
 	l.rows = container.NewVBox()
-	l.label = widget.NewLabel("")
+	l.label = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	l.prev = widget.NewButtonWithIcon(lang.L("Previous"), theme.NavigateBackIcon(), func() { l.load(l.page-1, nil) })
 	l.next = widget.NewButtonWithIcon(lang.L("Next"), theme.NavigateNextIcon(), func() { l.load(l.page+1, nil) })
+	l.next.IconPlacement = widget.ButtonIconTrailingText
 	l.bar = container.NewCenter(container.NewHBox(l.prev, l.label, l.next))
 	logout := widget.NewHyperlink(lang.L("Log out"), nil)
 	logout.SizeName = theme.SizeNameCaptionText
@@ -76,11 +77,8 @@ func newSandboxList(w fyne.Window) *sandboxList {
 			fyne.Do(func() { l.load(1, l.showLogin) })
 		}()
 	}
-	bottom := container.NewVBox(blank(0, 24), l.bar, container.NewCenter(logout))
-	l.content = container.NewStack(
-		canvas.NewRectangle(color.NRGBA{0xff, 0xff, 0xff, 0xb3}),
-		container.NewPadded(container.NewPadded(container.NewVBox(l.rows, bottom))),
-	)
+	bottom := container.NewVBox(footerGap(), l.bar, container.NewCenter(logout))
+	l.content = container.NewPadded(container.NewVBox(l.rows, bottom))
 	go func() {
 		for range time.Tick(3 * time.Second) {
 			var page, generation int
@@ -142,8 +140,8 @@ func (l *sandboxList) fetchPage(page, generation int, failed func(), background 
 		} else if err != nil {
 			l.rows.Objects = []fyne.CanvasObject{l.retryRow(lang.L("Failed to load sandboxes."), page)}
 			l.rows.Refresh()
+			l.fitHeight()
 		} else {
-			l.bar.Show()
 			l.page = page
 			l.pages = max(1, (result.TotalRecords+pageSize-1)/pageSize)
 			if page > l.pages {
@@ -184,21 +182,36 @@ func (l *sandboxList) show(sandboxes []sandbox) {
 			l.rows.Add(indented(l.retryRow(lang.L("Failed to load tunnels."), l.page)))
 		} else if len(s.Clients) == 0 {
 			none := widget.NewLabel(lang.L("No tunnels yet."))
-			none.Importance = widget.LowImportance
 			l.rows.Add(indented(none))
 		}
 		for _, client := range s.Clients {
 			l.rows.Add(l.tunnelRow(s.Name, client.Name))
 		}
 	}
-	l.label.SetText(fmt.Sprintf("%d / %d", l.page, l.pages))
+	if l.pages > 1 {
+		l.label.SetText(fmt.Sprintf("%d / %d", l.page, l.pages))
+		l.bar.Show()
+	} else {
+		l.bar.Hide()
+	}
 	if l.page > 1 {
 		l.prev.Enable()
+	} else {
+		l.prev.Disable()
 	}
 	if l.page < l.pages {
 		l.next.Enable()
 	} else {
 		l.next.Disable()
+	}
+	l.fitHeight()
+}
+
+func (l *sandboxList) fitHeight() {
+	size := l.w.Canvas().Size()
+	height := l.content.MinSize().Height
+	if size.Height != height {
+		l.w.Resize(fyne.NewSize(size.Width, height))
 	}
 }
 
@@ -245,15 +258,13 @@ func (l *sandboxList) tunnelRow(sandboxName, tunnel string) fyne.CanvasObject {
 		paint()
 	}
 	paint()
-	name := widget.NewLabelWithStyle(tunnel, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	name.SizeName = theme.SizeNameSubHeadingText
-	name.Importance = widget.HighImportance
+	name := widget.NewLabel(tunnel)
 	row := container.NewBorder(nil, nil, nil, toggle, name)
 	return indented(pill(row))
 }
 
 func indented(content fyne.CanvasObject) fyne.CanvasObject {
-	return container.NewBorder(nil, nil, blank(18, 0), nil, content)
+	return container.NewBorder(nil, nil, blank(theme.IconInlineSize(), 0), nil, content)
 }
 
 func (l *sandboxList) retryRow(text string, page int) fyne.CanvasObject {
@@ -289,8 +300,8 @@ func stopTunnel(p *process.Process) {
 
 func pill(content fyne.CanvasObject) fyne.CanvasObject {
 	border := canvas.NewRectangle(color.White)
-	border.StrokeColor = color.NRGBA{0x06, 0xb6, 0xd4, 0xff}
-	border.StrokeWidth = 2
+	border.StrokeColor = theme.Color(theme.ColorNameSeparator)
+	border.StrokeWidth = theme.SeparatorThicknessSize()
 	border.CornerRadius = 14
 	return container.NewStack(border, container.NewPadded(content))
 }

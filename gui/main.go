@@ -237,12 +237,12 @@ func login() {
 	form := container.NewVBox(
 		blank(0, 8),
 		step("1", lang.L("Sign in on the web page")),
-		container.NewCenter(open),
+		container.NewCenter(container.NewThemeOverride(open, loginActionTheme{a.Settings().Theme()})),
 		blank(0, 16),
 		step("2", lang.L("Paste the login code it shows")),
 		container.NewBorder(nil, nil, nil, submit, code),
 		failure,
-		blank(0, 32),
+		footerGap(),
 		container.NewCenter(languageSelect(a)),
 		blank(0, 8),
 	)

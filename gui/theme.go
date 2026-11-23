@@ -9,13 +9,28 @@ import (
 
 type loginTheme struct{ fyne.Theme }
 
+type loginActionTheme struct{ fyne.Theme }
+
+func (t loginActionTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+	if name == theme.ColorNamePrimary {
+		name = theme.ColorNameHyperlink
+	} else if name == theme.ColorNameForegroundOnPrimary {
+		return color.White
+	} else if name == theme.ColorNameHover {
+		name = theme.ColorNameForeground
+	}
+	return t.Theme.Color(name, variant)
+}
+
+var ink = color.NRGBA{0x0f, 0x17, 0x2a, 0xff}
+
 var colors = map[fyne.ThemeColorName]color.Color{
 	theme.ColorNamePrimary:         color.NRGBA{0x08, 0x91, 0xb2, 0xff},
 	theme.ColorNameHyperlink:       color.NRGBA{0x0e, 0x74, 0x90, 0xff},
 	theme.ColorNameFocus:           color.NRGBA{0x06, 0xb6, 0xd4, 0x66},
 	theme.ColorNameHover:           color.NRGBA{0xff, 0xff, 0xff, 0x40},
 	theme.ColorNameBackground:      color.NRGBA{0x7d, 0xd3, 0xfc, 0xff},
-	theme.ColorNameForeground:      color.NRGBA{0x0f, 0x17, 0x2a, 0xff},
+	theme.ColorNameForeground:      ink,
 	theme.ColorNameInputBackground: color.White,
 	theme.ColorNameButton:          color.NRGBA{0xe2, 0xe8, 0xf0, 0xff},
 }
