@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 
 	"fyne.io/fyne/v2"
@@ -94,10 +93,13 @@ func others(window bool) []*process.Process {
 	}
 	var found []*process.Process
 	for _, p := range processes {
-		name, _ := p.Name()
+		path, _ := p.Exe()
+		if p.Pid == int32(os.Getpid()) || path != exe {
+			continue
+		}
 		args, _ := p.CmdlineSlice()
 		isWindow := len(args) > 1 && args[1] == "login"
-		if name == filepath.Base(exe) && p.Pid != int32(os.Getpid()) && isWindow == window {
+		if isWindow == window {
 			found = append(found, p)
 		}
 	}
