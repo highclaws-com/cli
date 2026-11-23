@@ -1,5 +1,5 @@
 {
-  "Required program missing or not executable: {{.Name}}": "找不到所需程序，或程序无法执行：{{.Name}}",
+  "Connection failed.": "连接失败。",
   "Quit": "退出",
   "Login code": "登录码",
   "Open Browser": "打开浏览器",

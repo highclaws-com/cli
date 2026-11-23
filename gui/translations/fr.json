@@ -1,5 +1,5 @@
 {
-  "Required program missing or not executable: {{.Name}}": "Programme requis introuvable ou non exécutable : {{.Name}}",
+  "Connection failed.": "Échec de la connexion.",
   "Quit": "Quitter",
   "Login code": "Code de connexion",
   "Open Browser": "Ouvrir le navigateur",

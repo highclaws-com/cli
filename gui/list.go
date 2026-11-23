@@ -5,9 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -50,6 +47,7 @@ type sandboxList struct {
 	page       int
 	generation int
 	stopping   map[[2]string]bool
+	failures   map[[2]string]bool
 	rows       *fyne.Container
 	label      *widget.Label
 	prev       *widget.Button
@@ -60,7 +58,7 @@ type sandboxList struct {
 }
 
 func newSandboxList(w fyne.Window) *sandboxList {
-	l := &sandboxList{w: w, stopping: map[[2]string]bool{}}
+	l := &sandboxList{w: w, stopping: map[[2]string]bool{}, failures: map[[2]string]bool{}}
 	l.rows = container.NewVBox()
 	l.label = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	l.prev = widget.NewButtonWithIcon(lang.L("Previous"), theme.NavigateBackIcon(), func() { l.load(l.page-1, nil) })
@@ -200,6 +198,14 @@ func (l *sandboxList) fitHeight() {
 func (l *sandboxList) tunnelRow(sandboxName, tunnel string, connected bool) fyne.CanvasObject {
 	key := [2]string{sandboxName, tunnel}
 	toggle := widget.NewButton("", nil)
+	failure := widget.NewLabel(lang.L("Connection failed."))
+	failure.Importance = widget.DangerImportance
+	if connected {
+		delete(l.failures, key)
+	}
+	if !l.failures[key] {
+		failure.Hide()
+	}
 	paint := func() {
 		running := tunnelProcess(sandboxName, tunnel) != nil
 		if l.stopping[key] && (running || connected) {
@@ -227,35 +233,37 @@ func (l *sandboxList) tunnelRow(sandboxName, tunnel string, connected bool) fyne
 		toggle.Refresh()
 	}
 	toggle.OnTapped = func() {
+		delete(l.failures, key)
+		failure.Hide()
 		if p := tunnelProcess(sandboxName, tunnel); p != nil {
 			l.stopping[key] = true
 			stopTunnel(p)
 		} else {
-			exe, err := os.Executable()
-			if err != nil {
-				l.w.SetContent(l.retryRow(err.Error(), l.page))
-				return
-			}
-			proxy := filepath.Join(filepath.Dir(exe), "hc-proxy"+filepath.Ext(exe))
-			for _, dep := range []string{proxy, "ssh"} {
-				if _, err := exec.LookPath(dep); err != nil {
-					message := lang.L("Required program missing or not executable: {{.Name}}", map[string]any{"Name": dep})
-					l.w.SetContent(l.retryRow(message, l.page))
-					return
-				}
+			failed := func() {
+				l.failures[key] = true
+				failure.Show()
+				paint()
 			}
 			cmd := hc("safe-expose", sandboxName, tunnel)
 			if err := cmd.Start(); err != nil {
-				l.w.SetContent(l.retryRow(err.Error(), l.page))
+				failed()
 				return
 			}
-			go cmd.Wait()
+			go func() {
+				if cmd.Wait() != nil {
+					fyne.Do(func() {
+						if !l.stopping[key] {
+							failed()
+						}
+					})
+				}
+			}()
 		}
 		paint()
 	}
 	paint()
 	name := widget.NewLabel(tunnel)
-	row := container.NewBorder(nil, nil, nil, toggle, name)
+	row := container.NewBorder(nil, nil, nil, toggle, container.NewHBox(name, failure))
 	return indented(pill(row))
 }
 
