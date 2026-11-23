@@ -45,10 +45,7 @@ type sandbox struct {
 type sandboxList struct {
 	w          fyne.Window
 	page       int
-	pages      int
 	generation int
-	ready      bool
-	connected  map[[2]string]bool
 	stopping   map[[2]string]bool
 	rows       *fyne.Container
 	label      *widget.Label
@@ -60,7 +57,7 @@ type sandboxList struct {
 }
 
 func newSandboxList(w fyne.Window) *sandboxList {
-	l := &sandboxList{w: w, connected: map[[2]string]bool{}, stopping: map[[2]string]bool{}}
+	l := &sandboxList{w: w, stopping: map[[2]string]bool{}}
 	l.rows = container.NewVBox()
 	l.label = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	l.prev = widget.NewButtonWithIcon(lang.L("Previous"), theme.NavigateBackIcon(), func() { l.load(l.page-1, nil) })
@@ -83,12 +80,10 @@ func newSandboxList(w fyne.Window) *sandboxList {
 		for range time.Tick(3 * time.Second) {
 			var page, generation int
 			fyne.DoAndWait(func() {
-				if l.ready {
-					page, generation = l.page, l.generation
-				}
+				page, generation = l.page, l.generation
 			})
 			if page > 0 {
-				l.fetchPage(page, generation, nil, true)
+				l.fetchPage(page, generation, nil)
 			}
 		}
 	}()
@@ -105,34 +100,34 @@ func hcJSON(out any, args ...string) error {
 	return decoder.Decode(out)
 }
 
-func (l *sandboxList) placeholder(text string, importance widget.Importance) {
+func (l *sandboxList) placeholder(text string) {
 	label := widget.NewLabelWithStyle(text, fyne.TextAlignCenter, fyne.TextStyle{})
-	label.Importance = importance
 	l.rows.Objects = []fyne.CanvasObject{label}
 	l.rows.Refresh()
 }
 
 func (l *sandboxList) load(page int, failed func()) {
 	l.generation++
-	l.ready = false
-	l.prev.Disable()
-	l.next.Disable()
-	l.placeholder(lang.L("Loading…"), widget.MediumImportance)
+	l.page = 0
+	l.placeholder(lang.L("Loading…"))
 	l.bar.Hide()
 	l.w.SetPadded(false)
 	l.w.SetContent(l.content)
-	go l.fetchPage(page, l.generation, failed, false)
+	go l.fetchPage(page, l.generation, failed)
 }
 
-func (l *sandboxList) fetchPage(page, generation int, failed func(), background bool) {
+func (l *sandboxList) fetchPage(page, generation int, failed func()) {
 	var result struct {
 		Items        []sandbox `json:"items"`
 		TotalRecords int       `json:"total_records"`
 	}
 	err := hcJSON(&result, "sandbox", "ls", "--limit", fmt.Sprint(pageSize), "--page", fmt.Sprint(page))
-	l.fetchClients(result.Items)
+	for i := range result.Items {
+		s := &result.Items[i]
+		s.ClientsErr = hcJSON(s, "sandbox", "ls-clients", fmt.Sprint(s.ProvisionID))
+	}
 	fyne.DoAndWait(func() {
-		if generation != l.generation || (background && err != nil) {
+		if generation != l.generation || (err != nil && l.page > 0) {
 			return
 		}
 		if err != nil && failed != nil {
@@ -142,37 +137,21 @@ func (l *sandboxList) fetchPage(page, generation int, failed func(), background 
 			l.rows.Refresh()
 			l.fitHeight()
 		} else {
-			l.page = page
-			l.pages = max(1, (result.TotalRecords+pageSize-1)/pageSize)
-			if page > l.pages {
-				l.load(l.pages, nil)
-				return
+			pages := max(1, (result.TotalRecords+pageSize-1)/pageSize)
+			if page > pages {
+				l.load(pages, nil)
+			} else {
+				l.page = page
+				l.show(result.Items, pages)
 			}
-			l.ready = true
-			l.show(result.Items)
 		}
 	})
 }
 
-func (l *sandboxList) fetchClients(items []sandbox) {
-	for i := range items {
-		items[i].ClientsErr = hcJSON(&items[i], "sandbox", "ls-clients", fmt.Sprint(items[i].ProvisionID))
-	}
-}
-
-func (l *sandboxList) setConnected(items []sandbox) {
-	for _, s := range items {
-		for _, client := range s.Clients {
-			l.connected[[2]string{s.Name, client.Name}] = client.Connected
-		}
-	}
-}
-
-func (l *sandboxList) show(sandboxes []sandbox) {
-	l.setConnected(sandboxes)
-	l.placeholder(lang.L("No sandboxes yet."), widget.MediumImportance)
-	if len(sandboxes) > 0 {
-		l.rows.RemoveAll()
+func (l *sandboxList) show(sandboxes []sandbox, pages int) {
+	l.rows.RemoveAll()
+	if len(sandboxes) == 0 {
+		l.placeholder(lang.L("No sandboxes yet."))
 	}
 	for _, s := range sandboxes {
 		name := widget.NewLabelWithStyle(s.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
@@ -185,11 +164,11 @@ func (l *sandboxList) show(sandboxes []sandbox) {
 			l.rows.Add(indented(none))
 		}
 		for _, client := range s.Clients {
-			l.rows.Add(l.tunnelRow(s.Name, client.Name))
+			l.rows.Add(l.tunnelRow(s.Name, client.Name, client.Connected))
 		}
 	}
-	if l.pages > 1 {
-		l.label.SetText(fmt.Sprintf("%d / %d", l.page, l.pages))
+	if pages > 1 {
+		l.label.SetText(fmt.Sprintf("%d / %d", l.page, pages))
 		l.bar.Show()
 	} else {
 		l.bar.Hide()
@@ -199,7 +178,7 @@ func (l *sandboxList) show(sandboxes []sandbox) {
 	} else {
 		l.prev.Disable()
 	}
-	if l.page < l.pages {
+	if l.page < pages {
 		l.next.Enable()
 	} else {
 		l.next.Disable()
@@ -215,12 +194,12 @@ func (l *sandboxList) fitHeight() {
 	}
 }
 
-func (l *sandboxList) tunnelRow(sandboxName, tunnel string) fyne.CanvasObject {
+func (l *sandboxList) tunnelRow(sandboxName, tunnel string, connected bool) fyne.CanvasObject {
 	key := [2]string{sandboxName, tunnel}
 	toggle := widget.NewButton("", nil)
 	paint := func() {
 		running := tunnelProcess(sandboxName, tunnel) != nil
-		if l.stopping[key] && (running || l.connected[key]) {
+		if l.stopping[key] && (running || connected) {
 			toggle.SetText(lang.L("Disconnecting…"))
 			toggle.SetIcon(theme.ViewRefreshIcon())
 			toggle.Importance = widget.MediumImportance
@@ -233,7 +212,7 @@ func (l *sandboxList) tunnelRow(sandboxName, tunnel string) fyne.CanvasObject {
 			toggle.SetText(lang.L("Connect"))
 			toggle.SetIcon(linkIcon)
 			toggle.Importance = widget.MediumImportance
-		} else if !l.connected[key] {
+		} else if !connected {
 			toggle.SetText(lang.L("Connecting…"))
 			toggle.SetIcon(theme.ViewRefreshIcon())
 			toggle.Importance = widget.MediumImportance
