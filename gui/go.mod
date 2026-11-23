@@ -6,7 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.8.2
 	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4
 	github.com/shirou/gopsutil/v4 v4.26.10
-	golang.org/x/text v0.22.0
+	golang.org/x/text v0.37.0
 )
 
 require (
@@ -43,7 +43,7 @@ require (
 	github.com/yuin/goldmark v1.8.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/image v0.24.0 // indirect
-	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/image v0.41.0 // indirect
+	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 )
