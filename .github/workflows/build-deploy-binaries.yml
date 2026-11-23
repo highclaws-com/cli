@@ -36,15 +36,20 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            build: go build -o ../dist/hc-gui-linux-x64 .
+            build: go build -o ../dist/linux-x64/hc-gui .
           - os: ubuntu-24.04-arm
-            build: go build -o ../dist/hc-gui-linux-arm64 .
+            build: go build -o ../dist/linux-arm64/hc-gui .
           - os: macos-latest
             build: |
-              GOARCH=arm64 go build -o ../dist/hc-gui-mac-arm64 .
-              CGO_ENABLED=1 GOARCH=amd64 go build -o ../dist/hc-gui-mac-x64 .
+              GOARCH=arm64 go build \
+                -o ../dist/mac-arm64/hc-gui.app/Contents/MacOS/hc-gui .
+              CGO_ENABLED=1 GOARCH=amd64 go build \
+                -o ../dist/mac-x64/hc-gui.app/Contents/MacOS/hc-gui .
           - os: windows-latest
-            build: go build -o ../dist/hc-gui-win.exe .
+            build: |
+              go run github.com/tc-hib/go-winres@v0.3.3 simply \
+                --arch amd64 --manifest none --icon ../assets/hc.ico
+              go build -ldflags -H=windowsgui -o ../dist/win/hc-gui.exe .
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -58,15 +63,20 @@ jobs:
           sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev libayatana-appindicator3-dev patchelf
       - working-directory: gui
         shell: bash
+        run: ${{ matrix.build }}
+      - if: runner.os == 'macOS'
         run: |
-          mkdir ../dist
-          ${{ matrix.build }}
+          for app in dist/mac-*/hc-gui.app; do
+            mkdir "$app/Contents/Resources"
+            cp gui/Info.plist "$app/Contents/"
+            cp assets/hc.icns "$app/Contents/Resources/"
+          done
       - if: runner.os == 'Linux'
         working-directory: dist
         run: |
-          gui=$(ls hc-gui-linux-*)
-          lib=${gui#hc-gui-}/lib
-          mkdir -p "$lib"
+          gui=$(ls linux-*/hc-gui)
+          lib=$(dirname "$gui")/lib
+          mkdir "$lib"
           ldd "$gui" | awk '/lib(ayatana|dbusmenu)/ {print $3}' | xargs -r cp -L -t "$lib"
           for so in "$lib"/*; do patchelf --set-rpath '$ORIGIN' "$so"; done
           patchelf --set-rpath '$ORIGIN/lib' "$gui"
@@ -120,7 +130,7 @@ jobs:
 
   release-cli:
     needs: [build-cli, build-cli-windows, build-gui, build-proxy-helper]
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -129,19 +139,28 @@ jobs:
       - working-directory: binaries
         run: |
           mkdir ../dist
-          for gui in hc-gui-*; do
-            platform=${gui#hc-gui-}
-            platform=${platform%.exe}
-            ext=${gui#hc-gui-$platform}
-            mkdir -p $platform
-            mv hc-$platform$ext $platform/hc$ext
-            mv $gui $platform/hc-gui$ext
-            mv hc-proxy-$platform$ext $platform/hc-proxy$ext
-            chmod +x $platform/hc*
+          for platform in */; do
+            platform=${platform%/}
+            ext=
+            bin=$platform
+            if [[ $platform == win ]]; then
+              ext=.exe
+            elif [[ $platform == mac-* ]]; then
+              bin=$platform/hc-gui.app/Contents/MacOS
+            fi
+            mv hc-$platform$ext $bin/hc$ext
+            mv hc-proxy-$platform$ext $bin/hc-proxy$ext
+            chmod +x $bin/hc*
+            if [[ $platform == mac-* ]]; then
+              ln -s hc-gui.app/Contents/MacOS/hc $platform/hc
+              ln -s hc-gui.app/Contents/MacOS/hc-proxy $platform/hc-proxy
+              codesign --force --sign - $bin/hc $bin/hc-proxy
+              codesign --force --sign - $platform/hc-gui.app
+            fi
             if [[ $platform == linux-* ]]; then
               (cd "$platform" && tar -czf "../../dist/hc-$platform.tar.gz" *)
             else
-              (cd "$platform" && zip "../../dist/hc-$platform.zip" *)
+              (cd "$platform" && zip -ry "../../dist/hc-$platform.zip" .)
             fi
           done
       - uses: softprops/action-gh-release@v2

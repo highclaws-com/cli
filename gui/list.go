@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
-	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
@@ -320,7 +319,7 @@ func tunnelProcesses() map[[2]string]*process.Process {
 
 func stopTunnel(p *process.Process) {
 	if runtime.GOOS == "windows" {
-		exec.Command("taskkill.exe", "/PID", fmt.Sprint(p.Pid), "/T", "/F").Run()
+		command("taskkill.exe", "/PID", fmt.Sprint(p.Pid), "/T", "/F").Run()
 		return
 	}
 	children, _ := p.Children()

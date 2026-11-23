@@ -331,7 +331,7 @@ Build everything locally on Linux and launch the GUI with
 
 ```sh
 npm run build:local
-./dist/hc
+./dist/hc-gui
 ```
 
 Build standalone binaries:

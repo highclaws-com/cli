@@ -65,8 +65,22 @@ func switchLanguage(a fyne.App, code string) {
 	a.Quit()
 }
 
+func command(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	hideWindow(cmd)
+	return cmd
+}
+
 func hc(args ...string) *exec.Cmd {
-	return exec.Command(os.Args[2], append(os.Args[3:], args...)...)
+	exe, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	name := "hc"
+	if runtime.GOOS == "windows" {
+		name = "hc.exe"
+	}
+	return command(filepath.Join(filepath.Dir(exe), name), args...)
 }
 
 func main() {
@@ -97,13 +111,14 @@ func killAll(cutConnections bool) {
 			continue
 		}
 		args, _ := p.CmdlineSlice()
-		if len(args) < 2 {
+		if len(args) == 0 {
 			continue
 		}
 		if username, err := p.Username(); err != nil || username != owner {
 			continue
 		}
-		if filepath.Base(args[0]) == filepath.Base(os.Args[0]) && (!window || args[1] == "login") {
+		if filepath.Base(args[0]) == filepath.Base(os.Args[0]) &&
+			(!window || len(args) > 1 && args[1] == "login") {
 			p.Kill()
 		} else if cutConnections && slices.Contains(args, "safe-expose") &&
 			strings.Contains(strings.Join(args, " "), "hc") {
@@ -117,7 +132,7 @@ func show() {
 	if err != nil {
 		panic(err)
 	}
-	cmd := exec.Command(exe, append([]string{"login"}, os.Args[1:]...)...)
+	cmd := exec.Command(exe, "login")
 	if err := cmd.Start(); err != nil {
 		panic(err)
 	}

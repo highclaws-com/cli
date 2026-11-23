@@ -5,7 +5,6 @@ import { registerAdmin } from "./commands/admin"
 import { registerAuth } from "./commands/auth"
 import { registerConnector } from "./commands/connector"
 import { registerExpose } from "./commands/expose"
-import { registerGui } from "./commands/gui"
 import { registerProxy } from "./commands/proxy"
 import { registerSandbox } from "./commands/sandbox"
 import { registerSafeExpose } from "./commands/safe-expose"
@@ -23,7 +22,6 @@ registerAdmin(program)
 registerAuth(program)
 registerConnector(program)
 registerExpose(program)
-registerGui(program)
 registerProxy(program)
 registerSandbox(program)
 registerSafeExpose(program)

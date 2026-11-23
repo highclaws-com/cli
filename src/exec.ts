@@ -1,10 +1,11 @@
 import path from "node:path"
 import { spawn } from "node:child_process"
 
-export const hc = process.versions.bun ? [process.execPath] : [process.execPath, __filename]
-
 export function siblingBin(name: string): string {
-  return path.join(path.dirname(hc.at(-1)!), process.platform === "win32" ? `${name}.exe` : name)
+  return path.join(
+    path.dirname(process.versions.bun ? process.execPath : __filename),
+    process.platform === "win32" ? `${name}.exe` : name
+  )
 }
 
 export interface RunOptions {
