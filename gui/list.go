@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
-	"os"
+	"os/exec"
+	"runtime"
+	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -44,6 +47,14 @@ type tunnelClient struct {
 	Name      string `json:"name"`
 	Connected bool   `json:"connected"`
 }
+
+var defaultTunnelName = sync.OnceValue(func() string {
+	name, err := hc("safe-expose", "--print-default-name").Output()
+	if err != nil {
+		panic(err)
+	}
+	return strings.TrimSpace(string(name))
+})
 
 type sandboxList struct {
 	w          fyne.Window
@@ -129,6 +140,9 @@ func (l *sandboxList) fetchPage(page, generation int, failed func()) {
 	for i := range result.Items {
 		s := &result.Items[i]
 		s.ClientsErr = hcJSON(s, "sandbox", "ls-clients", fmt.Sprint(s.ProvisionID))
+		if s.ClientsErr == nil && len(s.Clients) == 0 {
+			s.Clients = []tunnelClient{{Name: defaultTunnelName()}}
+		}
 	}
 	var tunnels map[[2]string]*process.Process
 	if len(result.Items) > 0 {
@@ -167,12 +181,6 @@ func (l *sandboxList) show(sandboxes []sandbox, pages int, tunnels map[[2]string
 		rows = append(rows, container.NewHBox(widget.NewIcon(boxIcon), name))
 		if s.ClientsErr != nil {
 			rows = append(rows, indented(l.retryRow(lang.L("Failed to load tunnels."), l.page)))
-		} else if len(s.Clients) == 0 {
-			hostname, err := os.Hostname()
-			if err != nil {
-				panic(err)
-			}
-			s.Clients = []tunnelClient{{Name: hostname}}
 		}
 		for _, client := range s.Clients {
 			key := [2]string{s.Name, client.Name}
@@ -311,6 +319,10 @@ func tunnelProcesses() map[[2]string]*process.Process {
 }
 
 func stopTunnel(p *process.Process) {
+	if runtime.GOOS == "windows" {
+		exec.Command("taskkill.exe", "/PID", fmt.Sprint(p.Pid), "/T", "/F").Run()
+		return
+	}
 	children, _ := p.Children()
 	p.Terminate()
 	for _, child := range children {

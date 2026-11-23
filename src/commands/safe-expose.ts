@@ -34,8 +34,14 @@ const RETRY_MAX_MS = 10 * 60 * 1000
 async function safeExpose(
   sandbox: string | undefined,
   tunnel: string | undefined,
-  options: { reset?: boolean }
+  options: { reset?: boolean; printDefaultName?: boolean }
 ): Promise<void> {
+  const defaultName = os.hostname().toLowerCase().replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+/, "").slice(0, 32) || "localhost"
+  if (options.printDefaultName) {
+    console.log(defaultName)
+    return
+  }
   const helper = siblingBin("hc-proxy")
   fs.accessSync(helper, fs.constants.X_OK)
   if (!sandbox) {
@@ -49,7 +55,7 @@ async function safeExpose(
   let wait = 1000
   while (true) {
     try {
-      const endpoint = await tunnelEndpoint(await sandboxIdByName(sandbox), tunnel ?? os.hostname())
+      const endpoint = await tunnelEndpoint(await sandboxIdByName(sandbox), tunnel ?? defaultName)
       await runTunnel(helper, endpoint, () => { wait = 1000 })
     } catch (e) {
       console.error(`error: ${(e as Error).message}`)
@@ -161,5 +167,6 @@ export function registerSafeExpose(program: Command): void {
         "name, keep reconnecting as tunnel <tunnel> (default: this hostname)"
     )
     .option("--reset", "ask for a new endpoint instead of the saved one")
+    .option("--print-default-name", "print the default tunnel name and exit")
     .action(safeExpose)
 }
