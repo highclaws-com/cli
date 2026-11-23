@@ -315,7 +315,11 @@ A subcommand is added only when the agent cannot do the job:
 
 ## Development
 
-Requires Node.js >= 18.
+Requires:
+
+- [Node.js](https://nodejs.org) >= 18
+- [Go](https://go.dev), for the GUI
+- [Bun](https://bun.sh), for standalone binaries
 
 ```sh
 npm install
@@ -324,11 +328,10 @@ npm link
 hc <command>
 ```
 
-After source changes:
+Build the GUI, which `hc` with no command opens:
 
 ```sh
-npm run build
-hc <command>
+go -C gui build -o ../dist/hc-gui .
 ```
 
 Build standalone binaries:
@@ -337,22 +340,9 @@ Build standalone binaries:
 npm run bin:all
 ```
 
-### GUI
-
-`hc` with no command opens the GUI in `gui/`. Build it with:
-
-```sh
-npm run build
-go -C gui build -o ../dist/hc-gui .
-```
-
-Linux builds need the packages installed in
-`.github/workflows/build-deploy-binaries.yml`. On a Linux system that has
-`libappindicator3` instead of `libayatana-appindicator3`, build it with:
-
-```sh
-go -C gui build -tags legacy_appindicator -o ../dist/hc-gui .
-```
+On Linux, the GUI needs the packages installed in
+`.github/workflows/build-deploy-binaries.yml`. With `libappindicator3` instead
+of `libayatana-appindicator3`, build it with `-tags legacy_appindicator`.
 
 ## Administration
 
