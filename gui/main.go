@@ -242,8 +242,9 @@ func login() {
 		step("2", lang.L("Paste the login code it shows")),
 		container.NewBorder(nil, nil, nil, submit, code),
 		failure,
-		blank(0, 8),
+		blank(0, 32),
 		container.NewCenter(languageSelect(a)),
+		blank(0, 8),
 	)
 	w.Resize(fyne.NewSize(380, 0))
 	sandboxes.showLogin = func() {
@@ -251,6 +252,7 @@ func login() {
 		code.Enable()
 		submit.SetText(lang.L("Login"))
 		failure.Hide()
+		w.SetPadded(true)
 		w.SetContent(container.NewPadded(container.New(peek{}, card(form), mascot.Image, bubble(lang.L("Welcome! I will help you connect to your sandbox.")))))
 		start()
 	}

@@ -12,7 +12,6 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/shirou/gopsutil/v4/process"
@@ -78,8 +77,11 @@ func newSandboxList(w fyne.Window) *sandboxList {
 			fyne.Do(func() { l.load(1, l.showLogin) })
 		}()
 	}
-	bottom := container.New(layout.NewCustomPaddedVBoxLayout(0), l.bar, container.NewCenter(logout))
-	l.content = container.NewPadded(card(container.NewVBox(l.rows, bottom)))
+	bottom := container.NewVBox(blank(0, 24), l.bar, container.NewCenter(logout))
+	l.content = container.NewStack(
+		canvas.NewRectangle(color.NRGBA{0xff, 0xff, 0xff, 0xb3}),
+		container.NewPadded(container.NewPadded(container.NewVBox(l.rows, bottom))),
+	)
 	go func() {
 		for range time.Tick(3 * time.Second) {
 			var items []sandbox
@@ -119,6 +121,7 @@ func (l *sandboxList) load(page int, failed func()) {
 	l.next.Disable()
 	l.placeholder(lang.L("Loading…"), widget.MediumImportance)
 	l.bar.Hide()
+	l.w.SetPadded(false)
 	l.w.SetContent(l.content)
 	go func() {
 		var result struct {
