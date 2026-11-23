@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
-	"slices"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -44,20 +43,20 @@ type sandbox struct {
 }
 
 type sandboxList struct {
-	w         fyne.Window
-	page      int
-	pages     int
-	paints    []func()
-	items     []sandbox
-	connected map[[2]string]bool
-	stopping  map[[2]string]bool
-	rows      *fyne.Container
-	label     *widget.Label
-	prev      *widget.Button
-	next      *widget.Button
-	bar       *fyne.Container
-	content   fyne.CanvasObject
-	showLogin func()
+	w          fyne.Window
+	page       int
+	pages      int
+	generation int
+	ready      bool
+	connected  map[[2]string]bool
+	stopping   map[[2]string]bool
+	rows       *fyne.Container
+	label      *widget.Label
+	prev       *widget.Button
+	next       *widget.Button
+	bar        *fyne.Container
+	content    fyne.CanvasObject
+	showLogin  func()
 }
 
 func newSandboxList(w fyne.Window) *sandboxList {
@@ -84,15 +83,15 @@ func newSandboxList(w fyne.Window) *sandboxList {
 	)
 	go func() {
 		for range time.Tick(3 * time.Second) {
-			var items []sandbox
-			fyne.DoAndWait(func() { items = slices.Clone(l.items) })
-			l.fetchClients(items)
-			fyne.Do(func() {
-				l.setConnected(items)
-				for _, paint := range l.paints {
-					paint()
+			var page, generation int
+			fyne.DoAndWait(func() {
+				if l.ready {
+					page, generation = l.page, l.generation
 				}
 			})
+			if page > 0 {
+				l.fetchPage(page, generation, nil, true)
+			}
 		}
 	}()
 	return l
@@ -113,37 +112,48 @@ func (l *sandboxList) placeholder(text string, importance widget.Importance) {
 	label.Importance = importance
 	l.rows.Objects = []fyne.CanvasObject{label}
 	l.rows.Refresh()
-	l.paints = nil
 }
 
 func (l *sandboxList) load(page int, failed func()) {
+	l.generation++
+	l.ready = false
 	l.prev.Disable()
 	l.next.Disable()
 	l.placeholder(lang.L("Loading…"), widget.MediumImportance)
 	l.bar.Hide()
 	l.w.SetPadded(false)
 	l.w.SetContent(l.content)
-	go func() {
-		var result struct {
-			Items        []sandbox `json:"items"`
-			TotalRecords int       `json:"total_records"`
+	go l.fetchPage(page, l.generation, failed, false)
+}
+
+func (l *sandboxList) fetchPage(page, generation int, failed func(), background bool) {
+	var result struct {
+		Items        []sandbox `json:"items"`
+		TotalRecords int       `json:"total_records"`
+	}
+	err := hcJSON(&result, "sandbox", "ls", "--limit", fmt.Sprint(pageSize), "--page", fmt.Sprint(page))
+	l.fetchClients(result.Items)
+	fyne.DoAndWait(func() {
+		if generation != l.generation || (background && err != nil) {
+			return
 		}
-		err := hcJSON(&result, "sandbox", "ls", "--limit", fmt.Sprint(pageSize), "--page", fmt.Sprint(page))
-		l.fetchClients(result.Items)
-		fyne.Do(func() {
-			if err != nil && failed != nil {
-				failed()
-			} else if err != nil {
-				l.rows.Objects = []fyne.CanvasObject{l.retryRow(lang.L("Failed to load sandboxes."), page)}
-				l.rows.Refresh()
-			} else {
-				l.bar.Show()
-				l.page = page
-				l.pages = max(1, (result.TotalRecords+pageSize-1)/pageSize)
-				l.show(result.Items)
+		if err != nil && failed != nil {
+			failed()
+		} else if err != nil {
+			l.rows.Objects = []fyne.CanvasObject{l.retryRow(lang.L("Failed to load sandboxes."), page)}
+			l.rows.Refresh()
+		} else {
+			l.bar.Show()
+			l.page = page
+			l.pages = max(1, (result.TotalRecords+pageSize-1)/pageSize)
+			if page > l.pages {
+				l.load(l.pages, nil)
+				return
 			}
-		})
-	}()
+			l.ready = true
+			l.show(result.Items)
+		}
+	})
 }
 
 func (l *sandboxList) fetchClients(items []sandbox) {
@@ -161,7 +171,6 @@ func (l *sandboxList) setConnected(items []sandbox) {
 }
 
 func (l *sandboxList) show(sandboxes []sandbox) {
-	l.items = sandboxes
 	l.setConnected(sandboxes)
 	l.placeholder(lang.L("No sandboxes yet."), widget.MediumImportance)
 	if len(sandboxes) > 0 {
@@ -188,6 +197,8 @@ func (l *sandboxList) show(sandboxes []sandbox) {
 	}
 	if l.page < l.pages {
 		l.next.Enable()
+	} else {
+		l.next.Disable()
 	}
 }
 
@@ -234,7 +245,6 @@ func (l *sandboxList) tunnelRow(sandboxName, tunnel string) fyne.CanvasObject {
 		paint()
 	}
 	paint()
-	l.paints = append(l.paints, paint)
 	name := widget.NewLabelWithStyle(tunnel, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	name.SizeName = theme.SizeNameSubHeadingText
 	name.Importance = widget.HighImportance
