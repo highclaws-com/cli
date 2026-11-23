@@ -8,7 +8,10 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -70,20 +73,18 @@ func main() {
 	if err := lang.AddTranslationsFS(translations, "translations"); err != nil {
 		panic(err)
 	}
+	killAll(false)
 	if len(os.Args) > 1 && os.Args[1] == "login" {
-		for _, p := range others(true) {
-			p.Kill()
-		}
 		login()
-	} else if len(others(false)) > 0 {
-		show()
 	} else {
 		runTray(onReady, nil)
 	}
 }
 
-func others(window bool) []*process.Process {
-	exe, err := os.Executable()
+func killAll(cutConnections bool) {
+	window := len(os.Args) > 1 && os.Args[1] == "login"
+	self := &process.Process{Pid: int32(os.Getpid())}
+	owner, err := self.Username()
 	if err != nil {
 		panic(err)
 	}
@@ -91,19 +92,24 @@ func others(window bool) []*process.Process {
 	if err != nil {
 		panic(err)
 	}
-	var found []*process.Process
 	for _, p := range processes {
-		path, _ := p.Exe()
-		if p.Pid == int32(os.Getpid()) || path != exe {
+		if p.Pid == self.Pid {
 			continue
 		}
 		args, _ := p.CmdlineSlice()
-		isWindow := len(args) > 1 && args[1] == "login"
-		if isWindow == window {
-			found = append(found, p)
+		if len(args) < 2 {
+			continue
+		}
+		if username, err := p.Username(); err != nil || username != owner {
+			continue
+		}
+		if filepath.Base(args[0]) == filepath.Base(os.Args[0]) && (!window || args[1] == "login") {
+			p.Kill()
+		} else if cutConnections && slices.Contains(args, "safe-expose") &&
+			strings.Contains(strings.Join(args, " "), "hc") {
+			stopTunnel(p)
 		}
 	}
-	return found
 }
 
 func show() {
@@ -139,6 +145,7 @@ func onReady() {
 	}()
 	go func() {
 		<-quit.ClickedCh
+		killAll(true)
 		quitTray()
 	}()
 }
