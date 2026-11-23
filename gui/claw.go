@@ -61,16 +61,25 @@ func (c *claw) paint() {
 		c.Resource = fyne.NewStaticResource("cute-claw-normal.png", clawNormal)
 	}
 	c.Refresh()
+	c.Move(fyne.NewPos(c.Position().X, c.top()))
 }
 
-type peek struct{}
+func (c *claw) top() float32 {
+	if c.typing && !c.pointing {
+		const passwordBodyBaseline = 182.0 / 240
+		return clawLift + clawPeek - clawWidth*passwordBodyBaseline
+	}
+	return clawLift
+}
 
-func (peek) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+type peek struct{ mascot *claw }
+
+func (p peek) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	clawX := size.Width*0.7 - clawWidth/2
 	objects[0].Resize(fyne.NewSize(size.Width, objects[0].MinSize().Height))
 	objects[0].Move(fyne.NewPos(0, clawPeek+clawLift))
 	objects[1].Resize(objects[1].MinSize())
-	objects[1].Move(fyne.NewPos(clawX, clawLift))
+	p.mascot.Move(fyne.NewPos(clawX, p.mascot.top()))
 	objects[2].Resize(fyne.NewSize(clawX+8, 0))
 	height := objects[2].MinSize().Height
 	objects[2].Resize(fyne.NewSize(clawX+8, height))

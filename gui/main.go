@@ -17,7 +17,7 @@ import (
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/getlantern/systray"
+	"fyne.io/systray"
 	"github.com/shirou/gopsutil/v4/process"
 	"golang.org/x/text/language"
 )
@@ -253,7 +253,12 @@ func login() {
 		submit.SetText(lang.L("Login"))
 		failure.Hide()
 		w.SetPadded(true)
-		w.SetContent(container.NewPadded(container.New(peek{}, card(form), mascot.Image, bubble(lang.L("Welcome! I will help you connect to your sandbox.")))))
+		w.SetContent(container.NewPadded(container.New(
+			peek{mascot},
+			card(form),
+			mascot.Image,
+			bubble(lang.L("Welcome! I will help you connect to your sandbox.")),
+		)))
 		start()
 	}
 	sandboxes.load(1, sandboxes.showLogin)
