@@ -57,7 +57,7 @@ jobs:
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev libayatana-appindicator3-dev
       - working-directory: gui
         shell: bash
         run: |
@@ -117,10 +117,11 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: binaries
           merge-multiple: true
-      - working-directory: dist
+      - working-directory: binaries
         run: |
+          mkdir ../dist
           for gui in hc-gui-*; do
             platform=${gui#hc-gui-}
             platform=${platform%.exe}
@@ -130,9 +131,9 @@ jobs:
             mv $gui $platform/hc-gui$ext
             chmod +x $platform/*
             if [[ $platform == linux-* ]]; then
-              tar -czf hc-$platform.tar.gz -C $platform .
+              (cd "$platform" && tar -czf "../../dist/hc-$platform.tar.gz" *)
             else
-              (cd $platform && zip ../hc-$platform.zip *)
+              (cd "$platform" && zip "../../dist/hc-$platform.zip" *)
             fi
           done
       - uses: softprops/action-gh-release@v2
@@ -140,6 +141,4 @@ jobs:
           tag_name: latest
           name: HighClaws CLI
           prerelease: false
-          files: |
-            dist/*.tar.gz
-            dist/*.zip
+          files: dist/*

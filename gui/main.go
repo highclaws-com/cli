@@ -17,7 +17,6 @@ import (
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"fyne.io/systray"
 	"github.com/shirou/gopsutil/v4/process"
 	"golang.org/x/text/language"
 )
@@ -80,7 +79,7 @@ func main() {
 	} else if len(others(false)) > 0 {
 		show()
 	} else {
-		systray.Run(onReady, nil)
+		runTray(onReady, nil)
 	}
 }
 
@@ -127,9 +126,9 @@ func trayIcon() []byte {
 }
 
 func onReady() {
-	systray.SetIcon(trayIcon())
-	open := systray.AddMenuItem("HighClaws", "")
-	quit := systray.AddMenuItem(lang.L("Quit"), "")
+	setTrayIcon(trayIcon())
+	open := addMenuItem("HighClaws", "")
+	quit := addMenuItem(lang.L("Quit"), "")
 	show()
 	go func() {
 		for range open.ClickedCh {
@@ -138,7 +137,7 @@ func onReady() {
 	}()
 	go func() {
 		<-quit.ClickedCh
-		systray.Quit()
+		quitTray()
 	}()
 }
 
