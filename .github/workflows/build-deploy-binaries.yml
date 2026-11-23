@@ -41,6 +41,7 @@ jobs:
             build: go build -o ../dist/linux-arm64/hc-gui .
           - os: macos-latest
             build: |
+              export MACOSX_DEPLOYMENT_TARGET=12.0
               GOARCH=arm64 go build \
                 -o ../dist/mac-arm64/hc-gui.app/Contents/MacOS/hc-gui .
               CGO_ENABLED=1 GOARCH=amd64 go build \
