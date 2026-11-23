@@ -127,6 +127,10 @@ func (l *sandboxList) fetchPage(page, generation int, failed func()) {
 		s := &result.Items[i]
 		s.ClientsErr = hcJSON(s, "sandbox", "ls-clients", fmt.Sprint(s.ProvisionID))
 	}
+	var tunnels map[[2]string]*process.Process
+	if len(result.Items) > 0 {
+		tunnels = tunnelProcesses()
+	}
 	fyne.DoAndWait(func() {
 		if generation != l.generation || (err != nil && l.page > 0) {
 			return
@@ -143,13 +147,13 @@ func (l *sandboxList) fetchPage(page, generation int, failed func()) {
 				l.load(pages, nil)
 			} else {
 				l.page = page
-				l.show(result.Items, pages)
+				l.show(result.Items, pages, tunnels)
 			}
 		}
 	})
 }
 
-func (l *sandboxList) show(sandboxes []sandbox, pages int) {
+func (l *sandboxList) show(sandboxes []sandbox, pages int, tunnels map[[2]string]*process.Process) {
 	l.rows.RemoveAll()
 	if len(sandboxes) == 0 {
 		l.placeholder(lang.L("No sandboxes yet."))
@@ -165,7 +169,8 @@ func (l *sandboxList) show(sandboxes []sandbox, pages int) {
 			l.rows.Add(indented(none))
 		}
 		for _, client := range s.Clients {
-			l.rows.Add(l.tunnelRow(s.Name, client.Name, client.Connected))
+			key := [2]string{s.Name, client.Name}
+			l.rows.Add(l.tunnelRow(key, client.Connected, tunnels[key]))
 		}
 	}
 	if pages > 1 {
@@ -195,8 +200,7 @@ func (l *sandboxList) fitHeight() {
 	}
 }
 
-func (l *sandboxList) tunnelRow(sandboxName, tunnel string, connected bool) fyne.CanvasObject {
-	key := [2]string{sandboxName, tunnel}
+func (l *sandboxList) tunnelRow(key [2]string, connected bool, p *process.Process) fyne.CanvasObject {
 	toggle := widget.NewButton("", nil)
 	failure := widget.NewLabel(lang.L("Connection failed."))
 	failure.Importance = widget.DangerImportance
@@ -207,7 +211,7 @@ func (l *sandboxList) tunnelRow(sandboxName, tunnel string, connected bool) fyne
 		failure.Hide()
 	}
 	paint := func() {
-		running := tunnelProcess(sandboxName, tunnel) != nil
+		running := p != nil
 		if l.stopping[key] && (running || connected) {
 			toggle.SetText(lang.L("Disconnecting…"))
 			toggle.SetIcon(theme.ViewRefreshIcon())
@@ -233,26 +237,29 @@ func (l *sandboxList) tunnelRow(sandboxName, tunnel string, connected bool) fyne
 		toggle.Refresh()
 	}
 	toggle.OnTapped = func() {
+		l.generation++
 		delete(l.failures, key)
 		failure.Hide()
-		if p := tunnelProcess(sandboxName, tunnel); p != nil {
+		if p != nil {
 			l.stopping[key] = true
-			stopTunnel(p)
+			go stopTunnel(p)
 		} else {
 			failed := func() {
 				l.failures[key] = true
 				failure.Show()
 				paint()
 			}
-			cmd := hc("safe-expose", sandboxName, tunnel)
+			cmd := hc("safe-expose", key[0], key[1])
 			if err := cmd.Start(); err != nil {
 				failed()
 				return
 			}
+			p = &process.Process{Pid: int32(cmd.Process.Pid)}
 			go func() {
 				if cmd.Wait() != nil {
 					fyne.Do(func() {
 						if !l.stopping[key] {
+							p = nil
 							failed()
 						}
 					})
@@ -262,7 +269,7 @@ func (l *sandboxList) tunnelRow(sandboxName, tunnel string, connected bool) fyne
 		paint()
 	}
 	paint()
-	name := widget.NewLabel(tunnel)
+	name := widget.NewLabel(key[1])
 	row := container.NewBorder(nil, nil, nil, toggle, container.NewHBox(name, failure))
 	return indented(pill(row))
 }
@@ -279,7 +286,8 @@ func (l *sandboxList) retryRow(text string, page int) fyne.CanvasObject {
 	return container.NewHBox(failure, retry)
 }
 
-func tunnelProcess(sandboxName, tunnel string) *process.Process {
+func tunnelProcesses() map[[2]string]*process.Process {
+	tunnels := make(map[[2]string]*process.Process)
 	processes, err := process.Processes()
 	if err != nil {
 		panic(err)
@@ -287,11 +295,11 @@ func tunnelProcess(sandboxName, tunnel string) *process.Process {
 	for _, p := range processes {
 		args, err := p.CmdlineSlice()
 		n := len(args)
-		if err == nil && n >= 3 && args[n-3] == "safe-expose" && args[n-2] == sandboxName && args[n-1] == tunnel {
-			return p
+		if err == nil && n >= 3 && args[n-3] == "safe-expose" {
+			tunnels[[2]string{args[n-2], args[n-1]}] = p
 		}
 	}
-	return nil
+	return tunnels
 }
 
 func stopTunnel(p *process.Process) {
