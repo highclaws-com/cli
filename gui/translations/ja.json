@@ -1,4 +1,5 @@
 {
+  "Required program missing or not executable: {{.Name}}": "必要なプログラムが見つからないか、実行できません：{{.Name}}",
   "Quit": "終了",
   "Login code": "ログインコード",
   "Open Browser": "ブラウザを開く",

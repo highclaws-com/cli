@@ -1,4 +1,5 @@
 {
+  "Required program missing or not executable: {{.Name}}": "Falta el programa necesario o no se puede ejecutar: {{.Name}}",
   "Quit": "Salir",
   "Login code": "Código de acceso",
   "Open Browser": "Abrir navegador",

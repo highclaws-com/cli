@@ -1,4 +1,5 @@
 {
+  "Required program missing or not executable: {{.Name}}": "找不到必要程式，或程式無法執行：{{.Name}}",
   "Quit": "結束",
   "Login code": "登入碼",
   "Open Browser": "開啟瀏覽器",

@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -228,9 +231,23 @@ func (l *sandboxList) tunnelRow(sandboxName, tunnel string, connected bool) fyne
 			l.stopping[key] = true
 			stopTunnel(p)
 		} else {
+			exe, err := os.Executable()
+			if err != nil {
+				l.w.SetContent(l.retryRow(err.Error(), l.page))
+				return
+			}
+			proxy := filepath.Join(filepath.Dir(exe), "hc-proxy"+filepath.Ext(exe))
+			for _, dep := range []string{proxy, "ssh"} {
+				if _, err := exec.LookPath(dep); err != nil {
+					message := lang.L("Required program missing or not executable: {{.Name}}", map[string]any{"Name": dep})
+					l.w.SetContent(l.retryRow(message, l.page))
+					return
+				}
+			}
 			cmd := hc("safe-expose", sandboxName, tunnel)
 			if err := cmd.Start(); err != nil {
-				panic(err)
+				l.w.SetContent(l.retryRow(err.Error(), l.page))
+				return
 			}
 			go cmd.Wait()
 		}
