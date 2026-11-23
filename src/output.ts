@@ -82,5 +82,5 @@ export function checkPage(page: number, limit: number, total: number): void {
 // Pages count from 1, as `--page` does.
 export function printPage(page: number, limit: number, total: number): void {
   const pages = Math.max(1, Math.ceil(total / limit))
-  console.error(`page ${page}/${pages}, ${total} total`)
+  process.stderr.write(`page ${page}/${pages}, ${total} total\n`)
 }
