@@ -57,7 +57,7 @@ interface NewOptions extends OutputOptions {
   provider: string
   name: string
   model?: string
-  upstream?: string
+  customBaseUrl?: string
   authMethod: string
   key: string[]
   keyFile?: string
@@ -80,7 +80,7 @@ async function create(kind: string, options: NewOptions): Promise<void> {
     name: options.name,
     provider: options.provider,
     model_id: options.model,
-    upstream_overwrite: options.upstream,
+    custom_base_url: options.customBaseUrl,
     auth_method: options.authMethod,
     key
   })
@@ -194,7 +194,7 @@ export function registerConnector(program: Command): void {
     .requiredOption("--provider <provider>", "a provider from `hc connector schema <kind>`")
     .requiredOption("--name <name>", "name shown in lists")
     .option("--model <model-id>", "models only: the provider's model ID")
-    .option("--upstream <value>", "models only: endpoint that replaces the provider's own")
+    .option("--custom-base-url <url>", "models only: endpoint that replaces the provider's own")
     .option("--auth-method <method>", "token, oauth_codex or oauth_xai", "token")
     .option(
       "--key <field>",

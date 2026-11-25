@@ -185,7 +185,7 @@ hc sandbox unbind <id> agents|ims|vaults <agent-id> [--force]
 
 `connector schema` lists what the server accepts: each provider, its
 `--auth-method`, and its fields with required ones starred. FIELDS map to
-options (`model_id` is `--model`, `upstream_overwrite` is `--upstream`);
+options (`model_id` is `--model`, `custom_base_url` is `--custom-base-url`);
 each of the KEY-FIELDS is named with `--key`, and its value is asked for as
 in Secret values, in the order named. Add `--json` for each field's pattern.
 `connector new` passes the fields through as given; a missing or invalid field
