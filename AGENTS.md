@@ -335,6 +335,13 @@ From a sandbox name, as tunnel `my-laptop` (default: this computer's hostname):
 hc safe-expose HC-HQ my-laptop
 ```
 
+With `--id`, it takes the sandbox's `provision_id` instead, so a rename does not
+affect it; `hc-gui` starts tunnels this way:
+
+```sh
+hc safe-expose --id <id> my-laptop
+```
+
 It fetches a fresh endpoint on each try and reconnects after any failure,
 waiting 1s, 2s, 4s… up to 10 min, so it can run on startup. Stop it:
 

@@ -181,7 +181,7 @@ func (l *sandboxList) show(sandboxes []sandbox, pages int, tunnels map[[2]string
 			rows = append(rows, indented(l.retryRow(L("Failed to load tunnels."), l.page)))
 		}
 		for _, client := range s.Clients {
-			key := [2]string{s.Name, client.Name}
+			key := [2]string{fmt.Sprint(s.ProvisionID), client.Name}
 			rows = append(rows, l.tunnelRow(key, client.Connected, tunnels[key]))
 		}
 	}
@@ -263,7 +263,7 @@ func (l *sandboxList) tunnelRow(key [2]string, connected bool, p *process.Proces
 				failure.Show()
 				paint()
 			}
-			cmd := hc("safe-expose", key[0], key[1])
+			cmd := hc("safe-expose", "--id", key[0], key[1])
 			if err := cmd.Start(); err != nil {
 				failed()
 				return
@@ -309,7 +309,7 @@ func tunnelProcesses() map[[2]string]*process.Process {
 	for _, p := range processes {
 		args, err := p.CmdlineSlice()
 		n := len(args)
-		if err == nil && n >= 3 && args[n-3] == "safe-expose" {
+		if err == nil && n >= 4 && args[n-4] == "safe-expose" && args[n-3] == "--id" {
 			tunnels[[2]string{args[n-2], args[n-1]}] = p
 		}
 	}
